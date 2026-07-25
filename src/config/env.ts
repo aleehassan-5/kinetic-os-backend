@@ -46,6 +46,9 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional().default(""),
   GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
   GOOGLE_REDIRECT_URI: z.string().optional().default(""),
+  // "Continue with Google" sign-in — separate callback from the Calendar
+  // integration above since it carries a different scope and outcome.
+  GOOGLE_LOGIN_REDIRECT_URI: z.string().default("http://localhost:4000/auth/google/callback"),
 
   HUBSPOT_ACCESS_TOKEN: z.string().optional().default(""),
   GOOGLE_SHEETS_SPREADSHEET_ID: z.string().optional().default(""),

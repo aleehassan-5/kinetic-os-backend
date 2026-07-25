@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import { registerSchema, loginSchema, refreshSchema } from "./auth.schema";
 import * as authService from "./auth.service";
+import { buildGoogleAuthUrl, fetchGoogleProfile, signOAuthState, verifyOAuthState } from "@/lib/google-oauth";
+import { env } from "@/config/env";
 
 export async function registerHandler(req: Request, res: Response) {
   const input = registerSchema.parse(req.body);
@@ -29,4 +31,34 @@ export async function logoutHandler(req: Request, res: Response) {
 export async function meHandler(req: Request, res: Response) {
   const result = await authService.me(req.auth!.userId, req.auth!.workspaceId);
   res.status(200).json(result);
+}
+
+/** Kicks off "Continue with Google" — redirects the browser to Google's consent screen. */
+export async function googleRedirectHandler(_req: Request, res: Response) {
+  const state = signOAuthState();
+  res.redirect(buildGoogleAuthUrl(state));
+}
+
+/**
+ * Google redirects the browser back here with `code`/`state` after consent.
+ * We exchange the code, sign the person in (or create their workspace), and
+ * hand tokens to the frontend via a one-time redirect — the callback page
+ * reads them from the URL and stores them the same way email/password login does.
+ */
+export async function googleCallbackHandler(req: Request, res: Response) {
+  const { code, state, error } = req.query as { code?: string; state?: string; error?: string };
+  const failureUrl = `${env.WEB_APP_URL}/login?error=google_failed`;
+
+  if (error || !code || !state || !verifyOAuthState(state)) {
+    return res.redirect(failureUrl);
+  }
+
+  try {
+    const profile = await fetchGoogleProfile(code);
+    const result = await authService.loginWithGoogle(profile);
+    const params = new URLSearchParams({ access_token: result.accessToken, refresh_token: result.refreshToken });
+    res.redirect(`${env.WEB_APP_URL}/auth/callback?${params.toString()}`);
+  } catch {
+    res.redirect(failureUrl);
+  }
 }

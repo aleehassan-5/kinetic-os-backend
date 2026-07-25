@@ -3,6 +3,7 @@ import { hashPassword, comparePassword, hashToken } from "@/lib/password";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "@/lib/jwt";
 import { ConflictError, UnauthorizedError } from "@/lib/errors";
 import type { LoginInput, RegisterInput } from "./auth.schema";
+import type { GoogleProfile } from "@/lib/google-oauth";
 import type { Prisma } from "@prisma/client";
 
 function slugify(name: string): string {
@@ -75,6 +76,9 @@ export async function login(input: LoginInput) {
     include: { memberships: { where: { status: "ACTIVE" }, orderBy: { joinedAt: "asc" }, take: 1 } },
   });
   if (!user) throw new UnauthorizedError("Invalid email or password");
+  if (!user.passwordHash) {
+    throw new UnauthorizedError("This account uses Google sign-in. Continue with Google instead.");
+  }
 
   const valid = await comparePassword(input.password, user.passwordHash);
   if (!valid) throw new UnauthorizedError("Invalid email or password");
@@ -113,6 +117,66 @@ export async function refresh(refreshTokenRaw: string) {
   return issueTokenPair(payload.userId, membership.workspaceId, membership.role);
 }
 
+export async function loginWithGoogle(profile: GoogleProfile) {
+  // 1) Already linked to this Google account — sign them in directly.
+  let user = await prisma.user.findUnique({
+    where: { googleId: profile.googleId },
+    include: { memberships: { where: { status: "ACTIVE" }, orderBy: { joinedAt: "asc" }, take: 1 } },
+  });
+
+  // 2) An email/password account with the same email exists — link Google to it
+  //    instead of creating a duplicate account for the same person.
+  if (!user) {
+    const existingByEmail = await prisma.user.findUnique({
+      where: { email: profile.email },
+      include: { memberships: { where: { status: "ACTIVE" }, orderBy: { joinedAt: "asc" }, take: 1 } },
+    });
+    if (existingByEmail) {
+      user = await prisma.user.update({
+        where: { id: existingByEmail.id },
+        data: { googleId: profile.googleId, avatarUrl: existingByEmail.avatarUrl ?? profile.avatarUrl },
+        include: { memberships: { where: { status: "ACTIVE" }, orderBy: { joinedAt: "asc" }, take: 1 } },
+      });
+    }
+  }
+
+  // 3) Brand new person — create their workspace the same way register() does.
+  if (!user) {
+    const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const workspaceName = `${profile.name}'s Workspace`;
+      const workspace = await tx.workspace.create({
+        data: { name: workspaceName, slug: slugify(workspaceName) },
+      });
+
+      const newUser = await tx.user.create({
+        data: { name: profile.name, email: profile.email, googleId: profile.googleId, avatarUrl: profile.avatarUrl },
+      });
+
+      const membership = await tx.membership.create({
+        data: { userId: newUser.id, workspaceId: workspace.id, role: "OWNER", status: "ACTIVE", joinedAt: new Date() },
+      });
+
+      await tx.integration.createMany({
+        data: (
+          ["WHATSAPP", "TELEGRAM", "INSTAGRAM", "MESSENGER", "EMAIL", "CALENDLY", "GOOGLE_CALENDAR", "HUBSPOT", "GOOGLE_SHEETS"] as const
+        ).map((type) => ({ workspaceId: workspace.id, type, status: "NOT_CONNECTED" as const })),
+      });
+
+      return { newUser, membership };
+    });
+
+    user = { ...created.newUser, memberships: [created.membership] };
+  }
+
+  const membership = user.memberships[0];
+  if (!membership) throw new UnauthorizedError("This account has no active workspace");
+
+  await prisma.membership.update({ where: { id: membership.id }, data: { lastActiveAt: new Date() } });
+
+  const tokens = await issueTokenPair(user.id, membership.workspaceId, membership.role);
+  return { user: sanitizeUser(user), ...tokens };
+}
+
 export async function logout(refreshTokenRaw: string) {
   const tokenHash = hashToken(refreshTokenRaw);
   await prisma.refreshToken.updateMany({ where: { tokenHash }, data: { revokedAt: new Date() } });
@@ -126,7 +190,7 @@ export async function me(userId: string, workspaceId: string) {
   return { user: sanitizeUser(user), workspace: membership.workspace, role: membership.role };
 }
 
-function sanitizeUser<T extends { passwordHash: string }>(user: T) {
+function sanitizeUser<T extends { passwordHash?: string | null }>(user: T) {
   const { passwordHash, ...rest } = user;
   return rest;
 }

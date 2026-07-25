@@ -2,7 +2,15 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { asyncHandler } from "@/middleware/error-handler";
 import { requireAuth } from "@/middleware/auth";
-import { registerHandler, loginHandler, refreshHandler, logoutHandler, meHandler } from "./auth.controller";
+import {
+  registerHandler,
+  loginHandler,
+  refreshHandler,
+  logoutHandler,
+  meHandler,
+  googleRedirectHandler,
+  googleCallbackHandler,
+} from "./auth.controller";
 
 const router = Router();
 
@@ -14,5 +22,9 @@ router.post("/login", authLimiter, asyncHandler(loginHandler));
 router.post("/refresh", authLimiter, asyncHandler(refreshHandler));
 router.post("/logout", asyncHandler(logoutHandler));
 router.get("/me", requireAuth, asyncHandler(meHandler));
+
+// "Continue with Google" — browser-redirect flow, not JSON endpoints.
+router.get("/google", asyncHandler(googleRedirectHandler));
+router.get("/google/callback", asyncHandler(googleCallbackHandler));
 
 export default router;
