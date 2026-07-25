@@ -36,12 +36,21 @@ async function runAiReply(ctx: WorkflowExecutionContext): Promise<string> {
   }));
 
   const { reply } = await answerWithKnowledgeBase(ctx.workspaceId, history);
+
+  if (ctx.dryRun) {
+    return `(dry run) Would send AI reply: "${reply.slice(0, 120)}${reply.length > 120 ? "…" : ""}"`;
+  }
+
   const result = await sendReply(ctx.workspaceId, ctx.leadId, reply, "AI");
   return `AI reply sent (delivered: ${result.delivered})`;
 }
 
 async function runCrmSync(action: WorkflowActionData, ctx: WorkflowExecutionContext): Promise<string> {
   const lead = await prisma.lead.findUniqueOrThrow({ where: { id: ctx.leadId } });
+
+  if (ctx.dryRun) {
+    return `(dry run) Would sync lead "${lead.name ?? lead.id}" to ${action.integration ?? "no CRM configured"}`;
+  }
 
   if (action.integration === "HUBSPOT") {
     if (!env.HUBSPOT_ACCESS_TOKEN) {
@@ -80,6 +89,9 @@ async function runCrmSync(action: WorkflowActionData, ctx: WorkflowExecutionCont
 }
 
 async function runCalendarBook(action: WorkflowActionData, ctx: WorkflowExecutionContext): Promise<string> {
+  if (ctx.dryRun) {
+    return `(dry run) Would generate a booking link via ${action.provider ?? "default provider"}`;
+  }
   if (action.provider === "CALENDLY" && !env.CALENDLY_ACCESS_TOKEN) {
     return "Calendly not connected — booking skipped";
   }
@@ -93,6 +105,9 @@ async function runCalendarBook(action: WorkflowActionData, ctx: WorkflowExecutio
 }
 
 async function runNotify(action: WorkflowActionData, ctx: WorkflowExecutionContext): Promise<string> {
+  if (ctx.dryRun) {
+    return `(dry run) Would create notification: "${action.template ?? "Workflow action triggered"}"`;
+  }
   await createNotification(ctx.workspaceId, {
     type: "WORKFLOW",
     title: "Workflow action triggered",

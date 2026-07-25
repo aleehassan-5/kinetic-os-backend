@@ -84,6 +84,8 @@ export interface ListLeadsFilters {
   channel?: string;
   status?: string;
   search?: string;
+  minIntentScore?: number;
+  sortBy?: "recent" | "intentScore";
   page?: number;
   pageSize?: number;
 }
@@ -96,6 +98,7 @@ export async function listLeads(workspaceId: string, filters: ListLeadsFilters) 
     workspaceId,
     ...(filters.channel ? { channel: filters.channel as never } : {}),
     ...(filters.status ? { status: filters.status as never } : {}),
+    ...(typeof filters.minIntentScore === "number" ? { intentScore: { gte: filters.minIntentScore } } : {}),
     ...(filters.search
       ? {
           OR: [
@@ -107,10 +110,12 @@ export async function listLeads(workspaceId: string, filters: ListLeadsFilters) 
       : {}),
   };
 
+  const orderBy = filters.sortBy === "intentScore" ? { intentScore: "desc" as const } : { lastMessageAt: "desc" as const };
+
   const [leads, total] = await Promise.all([
     prisma.lead.findMany({
       where,
-      orderBy: { lastMessageAt: "desc" },
+      orderBy,
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),

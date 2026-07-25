@@ -46,6 +46,8 @@ export interface WorkflowExecutionContext {
   leadId: string;
   event: WorkflowTriggerData["event"];
   eventPayload: Record<string, unknown>;
+  /** When true, action handlers must simulate side effects instead of calling real integrations. */
+  dryRun?: boolean;
 }
 
 export interface WorkflowLogEntry {

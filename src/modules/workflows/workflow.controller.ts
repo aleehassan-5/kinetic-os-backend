@@ -37,3 +37,9 @@ export async function listRunsHandler(req: Request, res: Response) {
   const runs = await workflowService.listRuns(req.auth!.workspaceId, req.params.workflowId);
   res.status(200).json({ runs });
 }
+
+export async function testRunHandler(req: Request, res: Response) {
+  const leadId = typeof req.body?.leadId === "string" ? req.body.leadId : undefined;
+  const result = await workflowService.testRunWorkflow(req.auth!.workspaceId, req.params.workflowId, leadId);
+  res.status(200).json(result);
+}
