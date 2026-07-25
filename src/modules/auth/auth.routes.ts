@@ -8,6 +8,7 @@ import {
   refreshHandler,
   logoutHandler,
   meHandler,
+  updateProfileHandler,
   googleRedirectHandler,
   googleCallbackHandler,
 } from "./auth.controller";
@@ -22,6 +23,7 @@ router.post("/login", authLimiter, asyncHandler(loginHandler));
 router.post("/refresh", authLimiter, asyncHandler(refreshHandler));
 router.post("/logout", asyncHandler(logoutHandler));
 router.get("/me", requireAuth, asyncHandler(meHandler));
+router.patch("/me", requireAuth, asyncHandler(updateProfileHandler));
 
 // "Continue with Google" — browser-redirect flow, not JSON endpoints.
 router.get("/google", asyncHandler(googleRedirectHandler));

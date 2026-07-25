@@ -190,6 +190,17 @@ export async function me(userId: string, workspaceId: string) {
   return { user: sanitizeUser(user), workspace: membership.workspace, role: membership.role };
 }
 
+export async function updateProfile(userId: string, input: { name?: string; avatarUrl?: string | null }) {
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl } : {}),
+    },
+  });
+  return sanitizeUser(user);
+}
+
 function sanitizeUser<T extends { passwordHash?: string | null }>(user: T) {
   const { passwordHash, ...rest } = user;
   return rest;

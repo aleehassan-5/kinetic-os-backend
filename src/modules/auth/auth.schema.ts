@@ -16,5 +16,10 @@ export const refreshSchema = z.object({
   refreshToken: z.string().min(1),
 });
 
+export const updateProfileSchema = z.object({
+  name: z.string().min(2).max(80).optional(),
+  avatarUrl: z.string().url().nullable().optional(),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

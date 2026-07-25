@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { registerSchema, loginSchema, refreshSchema } from "./auth.schema";
+import { registerSchema, loginSchema, refreshSchema, updateProfileSchema } from "./auth.schema";
 import * as authService from "./auth.service";
 import { buildGoogleAuthUrl, fetchGoogleProfile, signOAuthState, verifyOAuthState } from "@/lib/google-oauth";
 import { env } from "@/config/env";
@@ -31,6 +31,12 @@ export async function logoutHandler(req: Request, res: Response) {
 export async function meHandler(req: Request, res: Response) {
   const result = await authService.me(req.auth!.userId, req.auth!.workspaceId);
   res.status(200).json(result);
+}
+
+export async function updateProfileHandler(req: Request, res: Response) {
+  const input = updateProfileSchema.parse(req.body);
+  const user = await authService.updateProfile(req.auth!.userId, input);
+  res.status(200).json(user);
 }
 
 /** Kicks off "Continue with Google" — redirects the browser to Google's consent screen. */
