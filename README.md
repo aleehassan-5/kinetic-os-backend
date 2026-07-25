@@ -38,6 +38,8 @@ Server runs on `http://localhost:4000` by default.
 
 See `.env.example` for the full list, grouped by concern (core, database, auth, AI providers, channel adapters, scheduling, CRM sync, social publishing, billing). Leave AI provider keys blank to run in local stub mode (no external calls, deterministic fake embeddings) — useful for development without live API keys.
 
+**"Continue with Google" sign-in** uses `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` from a Google Cloud OAuth client. Add `GOOGLE_LOGIN_REDIRECT_URI` (default `http://localhost:4000/auth/google/callback`) to that client's Authorized redirect URIs. New Google sign-ins create a workspace automatically; if the email already has a password account, Google is linked to it instead of creating a duplicate.
+
 ## Project Structure
 
 ```
