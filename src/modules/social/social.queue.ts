@@ -1,5 +1,6 @@
 import { Queue } from "bullmq";
 import { redisConnection } from "@/lib/redis";
+import { AppError } from "@/lib/errors";
 
 export interface SocialPublishJobData {
   postId: string;
@@ -15,10 +16,21 @@ export const socialPublishQueue = new Queue<SocialPublishJobData>("social-publis
   },
 });
 
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new AppError(message, 503)), ms)),
+  ]);
+}
+
 /** Schedules (or reschedules) a post's publish job to fire at `scheduledAt`. */
 export async function enqueuePublishJob(postId: string, scheduledAt: Date): Promise<string> {
   const delay = Math.max(0, scheduledAt.getTime() - Date.now());
-  const job = await socialPublishQueue.add("publish", { postId }, { delay, jobId: `social-publish:${postId}` });
+  const job = await withTimeout(
+    socialPublishQueue.add("publish", { postId }, { delay, jobId: `social-publish:${postId}` }),
+    5000,
+    "Couldn't schedule this post — the scheduling queue (Redis) isn't reachable. Set REDIS_URL to a running Redis instance and make sure the social worker process is running."
+  );
   return job.id ?? `social-publish:${postId}`;
 }
 
