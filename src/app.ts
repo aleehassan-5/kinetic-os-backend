@@ -19,6 +19,7 @@ import lemonSqueezyWebhookRoutes from "@/modules/billing/lemonsqueezy.webhook.ro
 import socialRoutes from "@/modules/social/social.routes";
 import socialWebhooksRoutes from "@/modules/social/social-webhooks.routes";
 import dashboardRoutes from "@/modules/dashboard/dashboard.routes";
+import channelConnectionsRoutes from "@/modules/channels/channel-connections.routes";
 
 export const app = express();
 
@@ -55,6 +56,7 @@ app.use("/workspace", workspaceRoutes);
 app.use("/billing", billingRoutes);
 app.use("/social", socialRoutes);
 app.use("/webhooks/social", socialWebhooksRoutes);
+app.use("/channel-connections", channelConnectionsRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

@@ -1,13 +1,14 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
-import type { ChannelAdapter, InboundMessage, OutboundMessage } from "./types";
+import type { ChannelAdapter, ChannelCredentials, InboundMessage, OutboundMessage } from "./types";
 
 // Meta WhatsApp Cloud API payload shape (trimmed to what we consume).
 interface WhatsAppWebhookBody {
   entry?: Array<{
     changes?: Array<{
       value?: {
+        metadata?: { phone_number_id?: string };
         contacts?: Array<{ profile?: { name?: string }; wa_id?: string }>;
         messages?: Array<{ from: string; timestamp: string; text?: { body?: string }; type: string }>;
       };
@@ -37,6 +38,19 @@ export const whatsappAdapter: ChannelAdapter = {
     }
   },
 
+  // Every workspace's WhatsApp number rides on the SAME Meta App webhook URL —
+  // this is how Meta tells us WHICH workspace a given message belongs to.
+  extractRoutingKey(body) {
+    const payload = body as WhatsAppWebhookBody;
+    for (const entry of payload.entry ?? []) {
+      for (const change of entry.changes ?? []) {
+        const id = change.value?.metadata?.phone_number_id;
+        if (id) return id;
+      }
+    }
+    return null;
+  },
+
   parseInboundWebhook(body) {
     const payload = body as WhatsAppWebhookBody;
     const messages: InboundMessage[] = [];
@@ -62,15 +76,18 @@ export const whatsappAdapter: ChannelAdapter = {
     return messages;
   },
 
-  async sendMessage(message: OutboundMessage) {
-    if (!env.WHATSAPP_ACCESS_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID) {
+  async sendMessage(message: OutboundMessage, credentials?: ChannelCredentials) {
+    const accessToken = credentials?.accessToken || env.WHATSAPP_ACCESS_TOKEN;
+    const phoneNumberId = credentials?.phoneNumberId || env.WHATSAPP_PHONE_NUMBER_ID;
+
+    if (!accessToken || !phoneNumberId) {
       logger.warn({ message }, "[whatsapp] no credentials configured — logging outbound message instead of sending");
       return { delivered: false };
     }
 
-    const res = await fetch(`https://graph.facebook.com/v20.0/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+    const res = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         messaging_product: "whatsapp",
         to: message.externalId,

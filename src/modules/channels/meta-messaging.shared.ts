@@ -4,15 +4,23 @@ import { env } from "@/config/env";
 import type { InboundMessage } from "./types";
 
 // Both Instagram DMs and Messenger ride on the same Meta "Messenger Platform"
-// webhook shape: entry[].messaging[] with sender.id + message.text.
+// webhook shape: entry[].messaging[] with sender.id + message.text. entry[].id
+// is the page/IG business account id — every workspace's page rides on the
+// same App-level webhook URL, so this is how we know whose message it is.
 interface MetaMessagingWebhookBody {
   entry?: Array<{
+    id?: string;
     messaging?: Array<{
       sender: { id: string };
       timestamp: number;
       message?: { text?: string; is_echo?: boolean };
     }>;
   }>;
+}
+
+export function extractMetaRoutingKey(body: unknown): string | null {
+  const payload = body as MetaMessagingWebhookBody;
+  return payload.entry?.[0]?.id ?? null;
 }
 
 export function parseMetaMessagingWebhook(body: unknown, channel: Channel): InboundMessage[] {

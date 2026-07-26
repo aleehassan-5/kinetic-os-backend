@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { NotFoundError } from "@/lib/errors";
 import { scoreIntent } from "./intent-scoring";
 import { getAdapter } from "@/modules/channels/registry";
+import { getChannelCredentials } from "@/modules/channels/channel-connections.service";
 import type { InboundMessage } from "@/modules/channels/types";
 import { createNotification } from "@/modules/notifications/notifications.service";
 import type { LeadStatus } from "@prisma/client";
@@ -149,7 +150,8 @@ export async function sendReply(workspaceId: string, leadId: string, text: strin
   if (!conversation) throw new NotFoundError("No conversation found for this lead");
 
   const adapter = getAdapter(lead.channel);
-  const result = await adapter.sendMessage({ externalId: lead.externalId, text });
+  const credentials = await getChannelCredentials(workspaceId, lead.channel);
+  const result = await adapter.sendMessage({ externalId: lead.externalId, text }, credentials);
 
   const message = await prisma.message.create({
     data: {

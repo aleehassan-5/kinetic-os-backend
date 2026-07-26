@@ -15,6 +15,10 @@ const envSchema = z.object({
   JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
   JWT_REFRESH_EXPIRES_IN: z.string().default("30d"),
 
+  // Encrypts per-workspace channel credentials (WhatsApp/Telegram/Instagram tokens
+  // customers connect themselves) at rest. Falls back to JWT_ACCESS_SECRET if unset.
+  CREDENTIALS_ENCRYPTION_KEY: z.string().optional().default(""),
+
   OPENAI_API_KEY: z.string().optional().default(""),
   OPENAI_CHAT_MODEL: z.string().default("gpt-4o-mini"),
   OPENAI_EMBEDDING_MODEL: z.string().default("text-embedding-3-small"),

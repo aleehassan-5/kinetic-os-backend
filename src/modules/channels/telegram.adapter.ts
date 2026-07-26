@@ -1,6 +1,6 @@
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
-import type { ChannelAdapter, InboundMessage, OutboundMessage } from "./types";
+import type { ChannelAdapter, ChannelCredentials, InboundMessage, OutboundMessage } from "./types";
 
 interface TelegramUpdate {
   message?: {
@@ -36,13 +36,14 @@ export const telegramAdapter: ChannelAdapter = {
     ];
   },
 
-  async sendMessage(message: OutboundMessage) {
-    if (!env.TELEGRAM_BOT_TOKEN) {
+  async sendMessage(message: OutboundMessage, credentials?: ChannelCredentials) {
+    const botToken = credentials?.botToken || env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) {
       logger.warn({ message }, "[telegram] no bot token configured — logging outbound message instead of sending");
       return { delivered: false };
     }
 
-    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: message.externalId, text: message.text }),

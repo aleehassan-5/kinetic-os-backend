@@ -3,21 +3,34 @@ import type { Request, Response } from "express";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { asyncHandler } from "@/middleware/error-handler";
+import { env } from "@/config/env";
 import { channelAdapters } from "@/modules/channels/registry";
+import {
+  findWorkspaceByRoutingKey,
+  findConnectionById,
+} from "@/modules/channels/channel-connections.service";
 import { handleInboundMessage } from "@/modules/leads/leads.service";
 import type { Channel } from "@prisma/client";
 
 const router = Router();
 
 /**
- * Every workspace connects a channel independently, so inbound webhooks need
- * to resolve *which* workspace a message belongs to. In production this
- * looks up the Integration row whose stored account id (phone number id,
- * bot token, page id...) matches the incoming payload. For a single-tenant
- * deployment (one workspace per backend instance), it simply resolves the
- * one workspace that has that channel connected.
+ * Every workspace connects a channel independently. For channels that share
+ * ONE webhook URL across every workspace (WhatsApp/Instagram/Messenger — Meta
+ * delivers all of them to your single App-level callback), we resolve the
+ * workspace via the routing key (phone_number_id / page id) the adapter pulls
+ * out of the payload, matched against each workspace's own connected
+ * Integration. If nothing matches (e.g. no one has connected this channel via
+ * Settings yet, or you're running a single-tenant setup off pure env vars),
+ * we fall back to "whichever workspace connected this channel most recently"
+ * so existing single-tenant/dev deployments keep working unchanged.
  */
-async function resolveWorkspaceForChannel(channel: Channel): Promise<string | null> {
+async function resolveWorkspaceForChannel(channel: Channel, routingKey: string | null): Promise<string | null> {
+  if (routingKey) {
+    const viaRoutingKey = await findWorkspaceByRoutingKey(channel, routingKey);
+    if (viaRoutingKey) return viaRoutingKey;
+  }
+
   const integration = await prisma.integration.findFirst({
     where: { type: channel as never, status: "CONNECTED" },
     orderBy: { updatedAt: "desc" },
@@ -53,9 +66,10 @@ function registerChannelWebhook(path: string, channel: Channel) {
       const messages = adapter.parseInboundWebhook(req.body);
       if (messages.length === 0) return res.status(200).json({ received: true, processed: 0 });
 
-      const workspaceId = await resolveWorkspaceForChannel(channel);
+      const routingKey = adapter.extractRoutingKey?.(req.body) ?? null;
+      const workspaceId = await resolveWorkspaceForChannel(channel, routingKey);
       if (!workspaceId) {
-        logger.warn({ channel }, "no workspace has this channel connected — dropping message");
+        logger.warn({ channel, routingKey }, "no workspace has this channel connected — dropping message");
         return res.status(200).json({ received: true, processed: 0 });
       }
 
@@ -69,9 +83,38 @@ function registerChannelWebhook(path: string, channel: Channel) {
 }
 
 registerChannelWebhook("/whatsapp", "WHATSAPP");
-registerChannelWebhook("/telegram", "TELEGRAM");
 registerChannelWebhook("/instagram", "INSTAGRAM");
 registerChannelWebhook("/messenger", "MESSENGER");
 registerChannelWebhook("/email", "EMAIL");
+
+// Telegram has no matchable account id in its payload, so each workspace's
+// bot gets its OWN webhook URL (registered automatically when they connect
+// via Settings → Channels) — the :integrationId in the path IS the routing.
+router.post(
+  "/telegram/:integrationId",
+  asyncHandler(async (req: Request, res: Response) => {
+    const adapter = channelAdapters.TELEGRAM;
+    const secretHeader = req.headers["x-telegram-bot-api-secret-token"];
+    if (env.TELEGRAM_WEBHOOK_SECRET && secretHeader !== env.TELEGRAM_WEBHOOK_SECRET) {
+      logger.warn("telegram webhook signature verification failed");
+      return res.status(401).json({ error: "Invalid signature" });
+    }
+
+    const connection = await findConnectionById(req.params.integrationId);
+    if (!connection || connection.status !== "CONNECTED") {
+      return res.status(200).json({ received: true, processed: 0 });
+    }
+
+    const messages = adapter.parseInboundWebhook(req.body);
+    for (const message of messages) {
+      await handleInboundMessage(connection.workspaceId, message);
+    }
+    res.status(200).json({ received: true, processed: messages.length });
+  })
+);
+
+// Legacy single-tenant fallback: one bot configured entirely via
+// TELEGRAM_BOT_TOKEN/.env, with no per-workspace connection in Settings.
+registerChannelWebhook("/telegram", "TELEGRAM");
 
 export default router;

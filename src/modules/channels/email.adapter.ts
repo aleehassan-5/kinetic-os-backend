@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
-import type { ChannelAdapter, InboundMessage, OutboundMessage } from "./types";
+import type { ChannelAdapter, ChannelCredentials, InboundMessage, OutboundMessage } from "./types";
 
 // Inbound email doesn't hit us directly — a provider (SendGrid Inbound Parse,
 // Postmark, Mailgun routes...) receives the raw email and forwards a parsed
@@ -54,7 +54,10 @@ export const emailAdapter: ChannelAdapter = {
     return messages;
   },
 
-  async sendMessage(message: OutboundMessage) {
+  // NOTE: email still sends via one shared SMTP account (env.SMTP_*) rather
+  // than per-workspace credentials — most teams share one sending domain
+  // anyway. Swap this for per-workspace SMTP/API-key creds if that changes.
+  async sendMessage(message: OutboundMessage, _credentials?: ChannelCredentials) {
     const t = getTransporter();
     if (!t) {
       logger.warn({ message }, "[email] no SMTP configured — logging outbound message instead of sending");
