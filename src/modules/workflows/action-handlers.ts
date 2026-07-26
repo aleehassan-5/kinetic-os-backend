@@ -5,6 +5,8 @@ import { answerWithKnowledgeBase } from "@/modules/chat/chat.service";
 import { sendReply } from "@/modules/leads/leads.service";
 import { createNotification } from "@/modules/notifications/notifications.service";
 import { appendRow } from "@/lib/google-sheets";
+import { createSchedulingLink, isCalendlyConfigured } from "@/lib/calendly";
+import { createCalendarEvent, isGoogleCalendarConfigured } from "@/lib/google-calendar";
 import type { WorkflowActionData, WorkflowExecutionContext } from "./workflow.types";
 
 export async function executeAction(action: WorkflowActionData, ctx: WorkflowExecutionContext): Promise<string> {
@@ -92,16 +94,76 @@ async function runCalendarBook(action: WorkflowActionData, ctx: WorkflowExecutio
   if (ctx.dryRun) {
     return `(dry run) Would generate a booking link via ${action.provider ?? "default provider"}`;
   }
-  if (action.provider === "CALENDLY" && !env.CALENDLY_ACCESS_TOKEN) {
-    return "Calendly not connected — booking skipped";
+
+  const lead = await prisma.lead.findUniqueOrThrow({ where: { id: ctx.leadId } });
+
+  if (action.provider === "CALENDLY") {
+    if (!isCalendlyConfigured()) {
+      return "Calendly not connected — booking skipped";
+    }
+    const bookingUrl = await createSchedulingLink(lead.id);
+    // The Meeting row for this gets created by the /webhooks/calendly
+    // `invitee.created` handler once the lead actually books a time —
+    // we only know a real start/end time at that point.
+    await sendReply(
+      ctx.workspaceId,
+      lead.id,
+      `Here's a link to grab a time that works for you: ${bookingUrl}`,
+      "AI"
+    );
+    return `Real Calendly booking link sent to lead: ${bookingUrl}`;
   }
-  if (action.provider === "GOOGLE_CALENDAR" && !env.GOOGLE_CLIENT_ID) {
-    return "Google Calendar not connected — booking skipped";
+
+  if (action.provider === "GOOGLE_CALENDAR") {
+    if (!isGoogleCalendarConfigured()) {
+      return "Google Calendar not connected — booking skipped";
+    }
+    // No live availability picker for a direct Calendar booking (unlike
+    // Calendly), so we propose the next business day at 2pm workspace time,
+    // 30 minutes — action.durationMinutes/proposedStartTime can override this.
+    const startTime = action.proposedStartTime ? new Date(action.proposedStartTime) : nextBusinessDayAt(14);
+    const durationMinutes = action.durationMinutes ?? 30;
+    const endTime = new Date(startTime.getTime() + durationMinutes * 60_000);
+
+    const event = await createCalendarEvent({
+      summary: `Call with ${lead.name ?? lead.email ?? "lead"}`,
+      description: `Booked automatically by Orbit AI for lead ${lead.id}.`,
+      startTime,
+      endTime,
+      attendeeEmail: lead.email,
+    });
+
+    await prisma.meeting.create({
+      data: {
+        leadId: lead.id,
+        source: "GOOGLE_CALENDAR",
+        status: "CONFIRMED",
+        topic: `Call with ${lead.name ?? lead.email ?? "lead"}`,
+        startTime,
+        endTime,
+        meetingUrl: event.htmlLink,
+      },
+    });
+
+    await sendReply(
+      ctx.workspaceId,
+      lead.id,
+      `You're booked for ${startTime.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}. Details: ${event.htmlLink}`,
+      "AI"
+    );
+    return `Real Google Calendar event created and lead notified: ${event.htmlLink}`;
   }
-  // Real implementation: create a Calendly single-use scheduling link via their API,
-  // or a Google Calendar event via googleapis, then send the link/confirmation to the lead.
-  logger.info({ leadId: ctx.leadId, provider: action.provider }, "[calendar-book] would create booking link");
-  return `Booking link generated via ${action.provider ?? "default provider"}`;
+
+  return `No calendar provider specified — skipped`;
+}
+
+/** Next weekday (Mon–Fri) at the given hour, UTC — used when no explicit time is proposed. */
+function nextBusinessDayAt(hourUtc: number): Date {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + 1);
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
+  d.setUTCHours(hourUtc, 0, 0, 0);
+  return d;
 }
 
 async function runNotify(action: WorkflowActionData, ctx: WorkflowExecutionContext): Promise<string> {

@@ -10,6 +10,7 @@ import {
   findConnectionById,
 } from "@/modules/channels/channel-connections.service";
 import { handleInboundMessage } from "@/modules/leads/leads.service";
+import { verifyCalendlyWebhookSignature } from "@/lib/calendly";
 import type { Channel } from "@prisma/client";
 
 const router = Router();
@@ -116,5 +117,82 @@ router.post(
 // Legacy single-tenant fallback: one bot configured entirely via
 // TELEGRAM_BOT_TOKEN/.env, with no per-workspace connection in Settings.
 registerChannelWebhook("/telegram", "TELEGRAM");
+
+interface CalendlyInviteePayload {
+  event: "invitee.created" | "invitee.canceled";
+  payload: {
+    email: string;
+    name: string;
+    tracking?: { utm_content?: string | null };
+    scheduled_event: {
+      start_time: string;
+      end_time: string;
+      name: string;
+      location?: { join_url?: string };
+    };
+    uri: string;
+    cancel_url?: string;
+  };
+}
+
+/**
+ * Fires when a lead actually books (or cancels) a time on a link created by
+ * calendar_book. This is the only place a Calendly Meeting row gets
+ * created — generating the link doesn't create one, since we don't know a
+ * real time until the lead picks one. Register this URL (…/webhooks/calendly)
+ * as a webhook subscription in Calendly (Integrations → Webhooks, or via
+ * their API) for the invitee.created and invitee.canceled events.
+ */
+router.post(
+  "/calendly",
+  asyncHandler(async (req: Request, res: Response) => {
+    const rawBody = (req as Request & { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
+    const signature = req.headers["calendly-webhook-signature"] as string | undefined;
+    if (!verifyCalendlyWebhookSignature(rawBody, signature)) {
+      logger.warn("calendly webhook signature verification failed");
+      return res.status(401).json({ error: "Invalid signature" });
+    }
+
+    const body = req.body as CalendlyInviteePayload;
+    const leadId = body.payload.tracking?.utm_content ?? null;
+
+    // Prefer the leadId we embedded in the scheduling link; fall back to
+    // matching by email against any workspace's leads if that's missing
+    // (e.g. link was created/shared manually rather than via a workflow).
+    const lead = leadId
+      ? await prisma.lead.findUnique({ where: { id: leadId } })
+      : await prisma.lead.findFirst({ where: { email: body.payload.email }, orderBy: { createdAt: "desc" } });
+
+    if (!lead) {
+      logger.warn({ email: body.payload.email }, "calendly webhook: no matching lead found");
+      return res.status(200).json({ received: true, matched: false });
+    }
+
+    if (body.event === "invitee.created") {
+      await prisma.meeting.create({
+        data: {
+          leadId: lead.id,
+          source: "CALENDLY",
+          status: "CONFIRMED",
+          topic: body.payload.scheduled_event.name,
+          startTime: new Date(body.payload.scheduled_event.start_time),
+          endTime: new Date(body.payload.scheduled_event.end_time),
+          meetingUrl: body.payload.scheduled_event.location?.join_url ?? null,
+        },
+      });
+    } else if (body.event === "invitee.canceled") {
+      await prisma.meeting.updateMany({
+        where: {
+          leadId: lead.id,
+          source: "CALENDLY",
+          startTime: new Date(body.payload.scheduled_event.start_time),
+        },
+        data: { status: "CANCELLED" },
+      });
+    }
+
+    res.status(200).json({ received: true, matched: true });
+  })
+);
 
 export default router;

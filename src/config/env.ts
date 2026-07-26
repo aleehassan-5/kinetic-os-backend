@@ -47,12 +47,17 @@ const envSchema = z.object({
 
   CALENDLY_ACCESS_TOKEN: z.string().optional().default(""),
   CALENDLY_WEBHOOK_SIGNING_KEY: z.string().optional().default(""),
+  CALENDLY_EVENT_TYPE_URI: z.string().optional().default(""), // e.g. https://api.calendly.com/event_types/AAAAAAAAAAAAAAAA
   GOOGLE_CLIENT_ID: z.string().optional().default(""),
   GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
   GOOGLE_REDIRECT_URI: z.string().optional().default(""),
   // "Continue with Google" sign-in — separate callback from the Calendar
   // integration above since it carries a different scope and outcome.
   GOOGLE_LOGIN_REDIRECT_URI: z.string().default("http://localhost:4000/auth/google/callback"),
+  // Google Calendar booking uses the same service account as Google Sheets
+  // sync (GOOGLE_SERVICE_ACCOUNT_EMAIL / _PRIVATE_KEY below) — just share
+  // this specific calendar with that service account email as an editor.
+  GOOGLE_CALENDAR_ID: z.string().optional().default(""),
 
   HUBSPOT_ACCESS_TOKEN: z.string().optional().default(""),
   GOOGLE_SHEETS_SPREADSHEET_ID: z.string().optional().default(""),

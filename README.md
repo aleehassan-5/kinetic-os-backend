@@ -32,7 +32,7 @@ Server runs on `http://localhost:4000` by default.
 | `chat` | LLM-powered conversational assistant (rate-limited per workspace) |
 | `workflows` | Automation engine with job queue (trigger → score → condition → action) |
 | `knowledge` | Document ingestion, chunking, embeddings for RAG (ingestion is rate-limited) |
-| `meetings` | Read-only list of booked meetings (no live Calendly/Google Calendar sync yet — see below) |
+| `meetings` | List of booked meetings — rows are created by real Calendly/Google Calendar bookings (see Known Gaps) |
 | `social` | Content generation, scheduling, and publishing across Instagram/Facebook/TikTok/LinkedIn |
 | `dashboard` | Aggregated workspace metrics (leads, reply rate, meetings, intent score, channel mix) |
 | `settings` | API key generation/revocation, read-only integration status |
@@ -42,7 +42,9 @@ Server runs on `http://localhost:4000` by default.
 
 ## Known Gaps
 
-- No real OAuth connect flow yet for Calendly / Google Calendar / HubSpot / Google Sheets — the `integrations` table is seeded `NOT_CONNECTED` at signup and the `meetings` endpoint is read-only until that's built.
+- **Calendly / Google Calendar are real, but need your own credentials to actually run**: `calendar_book` workflow actions generate a real Calendly scheduling link or create a real Google Calendar event — no more logging-and-pretending. Calendly bookings create a real `Meeting` row only once the lead actually books, via the `/webhooks/calendly` webhook (register it in your Calendly account). Google Calendar bookings create the `Meeting` row immediately since there's no separate booking step. Both require env vars — see below — that don't come with the repo.
+- HubSpot / Google Sheets CRM sync are similarly real but require your own credentials (same pattern as above).
+- No real per-workspace OAuth connect flow for these four yet (unlike the messaging channels) — they're configured once via env vars for the whole deployment, not per-workspace in Settings.
 - No automated test suite yet.
 - Rate limiting currently covers `/auth`, `/chat`, and `/knowledge` ingestion (the endpoints that trigger billed AI calls or are common abuse targets) — not every route.
 

@@ -20,6 +20,8 @@ export interface WorkflowActionData {
   template?: string; // for ai_reply / notify
   integration?: "HUBSPOT" | "GOOGLE_SHEETS"; // for crm_sync
   provider?: "CALENDLY" | "GOOGLE_CALENDAR"; // for calendar_book
+  proposedStartTime?: string; // ISO datetime — for calendar_book with GOOGLE_CALENDAR, defaults to next business day 2pm UTC
+  durationMinutes?: number; // for calendar_book with GOOGLE_CALENDAR, defaults to 30
   timeoutSeconds?: number;
 }
 
