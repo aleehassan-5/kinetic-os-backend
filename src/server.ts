@@ -25,6 +25,22 @@ function assertProductionSecretsAreOverridden() {
   if (env.INBOUND_EMAIL_WEBHOOK_SECRET === "orbit-email-secret") {
     problems.push("INBOUND_EMAIL_WEBHOOK_SECRET is still the default value — set it to a unique random string.");
   }
+  // Unlike the verify-token defaults above, these two have NO hardcoded
+  // fallback — but leaving them empty means the adapters skip signature
+  // verification ENTIRELY (see whatsapp.adapter.ts / meta-messaging.shared.ts),
+  // so any request claiming to be from Meta is accepted with no proof at all.
+  if (!env.WHATSAPP_APP_SECRET) {
+    problems.push(
+      "WHATSAPP_APP_SECRET is not set — WhatsApp webhook signature verification is completely skipped without it, " +
+        "so anyone could POST forged inbound messages to /webhooks/whatsapp."
+    );
+  }
+  if (!env.META_APP_SECRET) {
+    problems.push(
+      "META_APP_SECRET is not set — Instagram/Messenger webhook signature verification is completely skipped " +
+        "without it, so anyone could POST forged inbound messages to those webhooks."
+    );
+  }
   if (!env.CREDENTIALS_ENCRYPTION_KEY) {
     problems.push(
       "CREDENTIALS_ENCRYPTION_KEY is not set — connected channel credentials would be encrypted with a key " +
