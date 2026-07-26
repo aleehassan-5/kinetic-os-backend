@@ -20,6 +20,9 @@ import socialRoutes from "@/modules/social/social.routes";
 import socialWebhooksRoutes from "@/modules/social/social-webhooks.routes";
 import dashboardRoutes from "@/modules/dashboard/dashboard.routes";
 import channelConnectionsRoutes from "@/modules/channels/channel-connections.routes";
+import apiKeysRoutes from "@/modules/settings/api-keys.routes";
+import integrationsRoutes from "@/modules/settings/integrations.routes";
+import meetingsRoutes from "@/modules/meetings/meetings.routes";
 
 export const app = express();
 
@@ -50,6 +53,9 @@ app.use("/knowledge", knowledgeRoutes);
 app.use("/chat", chatRoutes);
 app.use("/workflows", workflowRoutes);
 app.use("/dashboard", dashboardRoutes);
+app.use("/api-keys", apiKeysRoutes);
+app.use("/integrations", integrationsRoutes);
+app.use("/meetings", meetingsRoutes);
 app.use("/notifications", notificationsRoutes);
 app.use("/team", teamRoutes);
 app.use("/workspace", workspaceRoutes);

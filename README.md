@@ -26,13 +26,25 @@ Server runs on `http://localhost:4000` by default.
 
 | Module | Responsibility |
 |---|---|
+| `auth` | Signup/login, JWT access+refresh, Google OAuth linking |
+| `workspace` | Workspace settings, team members & role management |
 | `leads` | Lead ingestion, intent scoring, CRUD |
-| `chat` | LLM-powered conversational assistant |
+| `chat` | LLM-powered conversational assistant (rate-limited per workspace) |
 | `workflows` | Automation engine with job queue (trigger → score → condition → action) |
-| `knowledge` | Document ingestion, chunking, embeddings for RAG |
+| `knowledge` | Document ingestion, chunking, embeddings for RAG (ingestion is rate-limited) |
+| `meetings` | Read-only list of booked meetings (no live Calendly/Google Calendar sync yet — see below) |
+| `social` | Content generation, scheduling, and publishing across Instagram/Facebook/TikTok/LinkedIn |
+| `dashboard` | Aggregated workspace metrics (leads, reply rate, meetings, intent score, channel mix) |
+| `settings` | API key generation/revocation, read-only integration status |
 | `notifications` | In-app notification delivery |
 | `billing` | Lemon Squeezy subscriptions & webhooks |
 | `webhooks` | Inbound channel webhooks (WhatsApp, Instagram, Telegram, Messenger, Email) |
+
+## Known Gaps
+
+- No real OAuth connect flow yet for Calendly / Google Calendar / HubSpot / Google Sheets — the `integrations` table is seeded `NOT_CONNECTED` at signup and the `meetings` endpoint is read-only until that's built.
+- No automated test suite yet.
+- Rate limiting currently covers `/auth`, `/chat`, and `/knowledge` ingestion (the endpoints that trigger billed AI calls or are common abuse targets) — not every route.
 
 ## Environment Variables
 
