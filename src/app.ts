@@ -18,6 +18,7 @@ import billingRoutes from "@/modules/billing/billing.routes";
 import lemonSqueezyWebhookRoutes from "@/modules/billing/lemonsqueezy.webhook.routes";
 import socialRoutes from "@/modules/social/social.routes";
 import socialWebhooksRoutes from "@/modules/social/social-webhooks.routes";
+import dashboardRoutes from "@/modules/dashboard/dashboard.routes";
 
 export const app = express();
 
@@ -47,6 +48,7 @@ app.use("/webhooks/lemonsqueezy", lemonSqueezyWebhookRoutes);
 app.use("/knowledge", knowledgeRoutes);
 app.use("/chat", chatRoutes);
 app.use("/workflows", workflowRoutes);
+app.use("/dashboard", dashboardRoutes);
 app.use("/notifications", notificationsRoutes);
 app.use("/team", teamRoutes);
 app.use("/workspace", workspaceRoutes);
