@@ -15,9 +15,18 @@ export const facebookPublisher: SocialPublisher = {
     }
 
     try {
-      const endpoint = input.mediaUrl ? `${pageId}/photos` : `${pageId}/feed`;
-      const body: Record<string, string> = { access_token: env.META_PAGE_ACCESS_TOKEN, ...(input.caption ? { message: input.caption } : {}) };
-      if (input.mediaUrl) body.url = input.mediaUrl;
+      const endpoint = input.isVideo ? `${pageId}/videos` : input.mediaUrl ? `${pageId}/photos` : `${pageId}/feed`;
+      const body: Record<string, string> = { access_token: env.META_PAGE_ACCESS_TOKEN };
+
+      if (input.isVideo && input.mediaUrl) {
+        body.file_url = input.mediaUrl;
+        if (input.caption) body.description = input.caption;
+      } else if (input.mediaUrl) {
+        body.url = input.mediaUrl;
+        if (input.caption) body.caption = input.caption;
+      } else if (input.caption) {
+        body.message = input.caption;
+      }
 
       const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${endpoint}`, {
         method: "POST",

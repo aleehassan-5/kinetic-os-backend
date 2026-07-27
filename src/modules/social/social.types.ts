@@ -16,6 +16,7 @@ export interface PublishInput {
   caption: string;
   mediaUrl: string | null;
   voiceoverUrl: string | null;
+  isVideo: boolean;
 }
 
 export interface PublishResult {

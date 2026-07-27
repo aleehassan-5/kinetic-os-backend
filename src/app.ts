@@ -4,6 +4,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import { env } from "@/config/env";
 import { notFoundHandler, errorHandler } from "@/middleware/error-handler";
+import { MEDIA_DIR, MEDIA_URL_PREFIX } from "@/lib/media-storage";
 
 import authRoutes from "@/modules/auth/auth.routes";
 import leadsRoutes from "@/modules/leads/leads.routes";
@@ -44,6 +45,11 @@ app.use(
 );
 
 app.get("/health", (_req, res) => res.status(200).json({ status: "ok", timestamp: new Date().toISOString() }));
+
+// Locally-generated social content (AI graphics, voiceovers, assembled reel
+// videos) — see src/lib/media-storage.ts for why this exists instead of
+// inlining base64 or relying on OpenAI/ElevenLabs' own (expiring) URLs.
+app.use(MEDIA_URL_PREFIX, express.static(MEDIA_DIR, { maxAge: "7d", immutable: true }));
 
 app.use("/auth", authRoutes);
 app.use("/leads", leadsRoutes);

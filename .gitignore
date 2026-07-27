@@ -1,5 +1,6 @@
 # dependencies
 node_modules/
+storage/media/
 
 # build output
 dist/

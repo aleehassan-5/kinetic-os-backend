@@ -6,6 +6,7 @@ import { answerWithKnowledgeBase } from "@/modules/chat/chat.service";
 import type { SocialPlatform, SocialContentType } from "@prisma/client";
 import { generatePostAssets } from "./content-generation";
 import { generateVoiceover } from "./voiceover";
+import { assembleReelVideo, isFfmpegAvailable } from "@/lib/video-assembly";
 import { getPublisher } from "./publishers/registry";
 import { enqueuePublishJob, cancelPublishJob } from "./social.queue";
 import type { InboundComment } from "./social.types";
@@ -73,9 +74,30 @@ export async function generateAndSchedulePost(workspaceId: string, postId: strin
     const assets = await generatePostAssets(post.title, post.prompt ?? undefined, post.contentType);
 
     let voiceoverUrl: string | null = null;
+    let mediaUrl = assets.mediaUrl;
+    const isVideoPost = post.contentType === "REEL" || post.contentType === "STORY";
+
     if (post.useVoiceover && assets.script) {
       const voice = await generateVoiceover(assets.script);
       voiceoverUrl = voice.voiceoverUrl;
+
+      if (isVideoPost && voiceoverUrl) {
+        try {
+          if (await isFfmpegAvailable()) {
+            mediaUrl = await assembleReelVideo(assets.mediaUrl, voiceoverUrl);
+          } else {
+            logger.warn(
+              { postId: post.id },
+              "[social] ffmpeg not installed on this server — publishing the still graphic instead of an assembled reel video"
+            );
+          }
+        } catch (err) {
+          logger.error(
+            { err: (err as Error).message, postId: post.id },
+            "[social] reel video assembly failed — falling back to the still graphic"
+          );
+        }
+      }
     }
 
     const scheduledAt = post.scheduledAt ?? new Date();
@@ -86,7 +108,7 @@ export async function generateAndSchedulePost(workspaceId: string, postId: strin
       data: {
         caption: assets.caption,
         script: assets.script,
-        mediaUrl: assets.mediaUrl,
+        mediaUrl,
         voiceoverUrl,
         scheduledAt,
         status: isDue ? "GENERATING" : "SCHEDULED",
@@ -127,6 +149,7 @@ export async function publishPost(workspaceId: string, postId: string) {
     caption: post.caption ?? post.title,
     mediaUrl: post.mediaUrl,
     voiceoverUrl: post.voiceoverUrl,
+    isVideo: post.mediaUrl?.endsWith(".mp4") ?? false,
   });
 
   const updated = await prisma.socialPost.update({

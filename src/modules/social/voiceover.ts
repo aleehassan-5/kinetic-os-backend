@@ -1,5 +1,6 @@
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
+import { saveMediaBuffer } from "@/lib/media-storage";
 import type { VoiceoverResult } from "./social.types";
 
 const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // ElevenLabs' default "Rachel" voice
@@ -35,8 +36,6 @@ export async function generateVoiceover(script: string): Promise<VoiceoverResult
   }
 
   const buffer = Buffer.from(await res.arrayBuffer());
-  // Real deployments should upload this buffer to object storage (S3/R2/Cloudinary)
-  // and return the public URL. Inlined as a data URL here so the pipeline has
-  // no hard dependency on a storage provider being configured.
-  return { voiceoverUrl: `data:audio/mpeg;base64,${buffer.toString("base64")}`, provider: "elevenlabs" };
+  const voiceoverUrl = await saveMediaBuffer(buffer, "mp3");
+  return { voiceoverUrl, provider: "elevenlabs" };
 }

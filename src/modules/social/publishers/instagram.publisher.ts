@@ -4,6 +4,20 @@ import type { PublishInput, PublishResult, SocialPublisher } from "../social.typ
 
 const GRAPH_VERSION = "v20.0";
 
+/** Reels container creation is async on Meta's side — poll until it's FINISHED (or ERROR) before publishing. */
+async function waitForContainerReady(containerId: string, accessToken: string, maxAttempts = 20): Promise<void> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await fetch(
+      `https://graph.facebook.com/${GRAPH_VERSION}/${containerId}?fields=status_code&access_token=${accessToken}`
+    );
+    const data = (await res.json()) as { status_code?: string };
+    if (data.status_code === "FINISHED") return;
+    if (data.status_code === "ERROR") throw new Error("Instagram media container processing failed");
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  throw new Error("Instagram media container did not finish processing in time");
+}
+
 export const instagramPublisher: SocialPublisher = {
   platform: "INSTAGRAM",
 
@@ -15,21 +29,26 @@ export const instagramPublisher: SocialPublisher = {
     }
 
     try {
-      // Step 1: create a media container.
+      // Step 1: create a media container — video_url + media_type:REELS for
+      // an actual assembled reel video, image_url for a static graphic.
+      const containerBody = input.isVideo
+        ? { media_type: "REELS", video_url: input.mediaUrl, caption: input.caption, access_token: env.META_PAGE_ACCESS_TOKEN }
+        : { image_url: input.mediaUrl, caption: input.caption, access_token: env.META_PAGE_ACCESS_TOKEN };
+
       const containerRes = await fetch(
         `https://graph.facebook.com/${GRAPH_VERSION}/${igBusinessAccountId}/media`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            image_url: input.mediaUrl,
-            caption: input.caption,
-            access_token: env.META_PAGE_ACCESS_TOKEN,
-          }),
+          body: JSON.stringify(containerBody),
         }
       );
       if (!containerRes.ok) throw new Error(`container create failed (${containerRes.status}): ${await containerRes.text()}`);
       const container = (await containerRes.json()) as { id: string };
+
+      if (input.isVideo) {
+        await waitForContainerReady(container.id, env.META_PAGE_ACCESS_TOKEN);
+      }
 
       // Step 2: publish the container.
       const publishRes = await fetch(

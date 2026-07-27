@@ -12,6 +12,16 @@ export const linkedinPublisher: SocialPublisher = {
       return { published: false, error: "LinkedIn not connected — publish skipped" };
     }
 
+    // LinkedIn video needs a real registerUpload → PUT binary → reference-asset
+    // flow, not just a URL — unlike Instagram/Facebook/TikTok, LinkedIn's API
+    // won't pull video from a URL for you. That's not implemented yet, so we
+    // decline clearly instead of sending a request that would just fail with
+    // a confusing API error.
+    if (input.isVideo) {
+      logger.warn({ post: input }, "[linkedin] video (reel) publishing not implemented — needs LinkedIn's asset upload flow");
+      return { published: false, error: "LinkedIn video publishing isn't built yet — only image/text posts are supported" };
+    }
+
     try {
       const res = await fetch("https://api.linkedin.com/v2/ugcPosts", {
         method: "POST",

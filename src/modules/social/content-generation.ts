@@ -1,16 +1,17 @@
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 import { generateChatCompletion } from "@/modules/chat/llm";
+import { saveDataUrl, rehostRemoteUrl } from "@/lib/media-storage";
 import type { SocialContentType } from "@prisma/client";
 import type { GeneratedAsset } from "./social.types";
 
 /**
- * A deterministic, dependency-free "poster" placeholder — an inline SVG data
- * URL rendering the post title on a brand-colored card. Lets the whole
- * generate → schedule → publish pipeline run end-to-end with zero external
- * keys configured; swap for the real OpenAI Images call once billed.
+ * A deterministic, dependency-free "poster" placeholder — an inline SVG,
+ * saved to real storage below (same as every other generated asset) so
+ * even the no-API-keys stub mode produces a genuinely publishable URL.
+ * Swap for the real OpenAI Images call once billed.
  */
-function localStubGraphic(title: string, contentType: SocialContentType): string {
+async function localStubGraphic(title: string, contentType: SocialContentType): Promise<string> {
   const bg = contentType === "REEL" || contentType === "STORY" ? "#141225" : "#1B1832";
   const safeTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").slice(0, 90);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
@@ -21,7 +22,7 @@ function localStubGraphic(title: string, contentType: SocialContentType): string
   </text>
   <text x="80" y="1000" fill="#7C5CFF" font-family="sans-serif" font-size="28">Orbit AI — auto-generated</text>
 </svg>`;
-  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+  return saveDataUrl(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
 }
 
 async function generateCaption(title: string, prompt: string | undefined, contentType: SocialContentType): Promise<string> {
@@ -67,8 +68,11 @@ async function generateGraphicViaOpenAI(title: string, prompt: string | undefine
 
   const data = (await res.json()) as { data: Array<{ url?: string; b64_json?: string }> };
   const image = data.data[0];
-  if (image.url) return image.url;
-  if (image.b64_json) return `data:image/png;base64,${image.b64_json}`;
+  // OpenAI's hosted image URLs expire (~1 hour) — useless for a post scheduled
+  // for later, and Instagram/TikTok/Facebook fetch media server-side at
+  // publish time, so we re-host it on our own storage immediately instead.
+  if (image.url) return rehostRemoteUrl(image.url, "png");
+  if (image.b64_json) return saveDataUrl(`data:image/png;base64,${image.b64_json}`);
   throw new Error("OpenAI image generation returned no image data");
 }
 
