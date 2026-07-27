@@ -48,7 +48,7 @@ Server runs on `http://localhost:4000` by default.
 - **Reel videos require `ffmpeg` installed on the server.** The pipeline generates a real AI graphic, script, and voiceover, then actually assembles them into a real mp4 via `ffmpeg` (`src/lib/video-assembly.ts`) — no more pretending a static image + a separate unmerged audio file is a "reel". If `ffmpeg` isn't on PATH, generation falls back to publishing the still graphic instead of failing the whole post (logged clearly either way). Install it with your platform's package manager, or use a base Docker image that includes it.
 - **LinkedIn video posting isn't implemented.** LinkedIn's API needs a real multi-step asset registration + binary upload for video (unlike Instagram/Facebook/TikTok, which accept a source URL), which isn't built yet — LinkedIn reel posts are declined with a clear error rather than silently failing against the real API. Image/text posts to LinkedIn work normally.
 - Generated media (graphics/voiceovers/assembled reels) is stored on local disk (`storage/media/`, served via `/media`) rather than S3/Cloudinary/etc — fine for a single server, but won't survive a redeploy or scale across multiple instances. Swap `src/lib/media-storage.ts` for real object storage before that becomes a problem.
-- No automated test suite yet.
+- Test coverage is focused on auth/billing/workflows (the highest-stakes modules) — see Testing section below; leads/channels/social/knowledge aren't covered yet.
 - Rate limiting currently covers `/auth`, `/chat`, and `/knowledge` ingestion (the endpoints that trigger billed AI calls or are common abuse targets) — not every route.
 
 ## Environment Variables
@@ -68,6 +68,30 @@ src/
   app.ts         # Express app setup
   server.ts      # Entry point
 ```
+
+## Testing
+
+`npm test` runs the suite (Vitest). Coverage focuses on the highest-stakes modules first:
+
+- **Auth** (`tests/modules/auth/`) — signup/login/refresh-token rotation, wrong-password handling, Google-only accounts, conflict on duplicate email.
+- **Billing** (`tests/modules/billing/`) — Lemon Squeezy webhook signature verification (real HMAC, not mocked), subscription state transitions, invoice recording, missing-workspace-id handling.
+- **Workflow engine** (`tests/modules/workflows/`) — dry-run mode never calls a real integration (asserted per action type), real execution paths, graceful handling of unknown action types and missing conversations.
+
+These are unit/service tests with Prisma mocked (`vi.mock("@/lib/prisma", ...)`) rather than a live database — fast, and don't need Postgres running to execute. `tests/setup.ts` loads `.env.test` before anything else imports `src/config/env.ts` (which is required, since it validates `process.env` at import time and exits the process if invalid).
+
+Not yet covered: leads/channels/social/knowledge modules, and no end-to-end tests against a real database. Contributions welcome — follow the existing pattern (mock Prisma + any external API client, assert on what got called).
+
+## Deployment
+
+**Docker** (recommended): `docker compose up --build` starts Postgres (with pgvector), Redis, the API, and both BullMQ workers (workflow + social) in one command. Copy `.env.example` to `.env` and fill in real values first — `npm run generate:secrets` will generate fresh random values for every secret that ships with an insecure default.
+
+The `Dockerfile` installs `ffmpeg` (needed for real reel video assembly) and generates the Prisma client at build time. Runs as a non-root user.
+
+Without Docker: `npm run build && npm start` for the API, `npm run worker` and `npm run social:worker` as separate long-running processes (they need to stay running to process queued jobs — a process manager like PM2 or systemd is recommended for production, since Node itself won't restart a crashed process).
+
+## Monitoring
+
+Set `SENTRY_DSN` (see `.env.example`) to report errors to Sentry instead of only logging locally. Covers: unhandled 5xx errors in Express request handlers, uncaught exceptions and unhandled promise rejections at the process level (in all three processes — API server, workflow worker, social worker), and BullMQ job failures/connection errors. Without a DSN configured, none of this reporting happens — errors are still logged locally via `pino`, just not sent anywhere.
 
 ## Status
 

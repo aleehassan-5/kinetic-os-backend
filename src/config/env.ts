@@ -66,6 +66,10 @@ const envSchema = z.object({
   // URL, they don't accept inline base64 data URLs.
   API_PUBLIC_URL: z.string().default("http://localhost:4000"),
 
+  // Error monitoring — leave blank to skip (errors still get logged via
+  // pino either way, just not reported anywhere outside this server).
+  SENTRY_DSN: z.string().optional().default(""),
+
   HUBSPOT_ACCESS_TOKEN: z.string().optional().default(""),
   GOOGLE_SHEETS_SPREADSHEET_ID: z.string().optional().default(""),
   GOOGLE_SERVICE_ACCOUNT_EMAIL: z.string().optional().default(""),

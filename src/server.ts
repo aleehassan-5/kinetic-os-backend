@@ -1,8 +1,17 @@
 import { env } from "@/config/env";
+import { initSentry } from "@/lib/sentry";
+
+// Must run before anything else does real work, so Sentry can catch
+// errors from as early in the process lifetime as possible.
+initSentry();
+
 import { app } from "@/app";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { subscribeWorkflowsToEvents } from "@/modules/workflows/workflow.service";
+import { installCrashSafetyNet } from "@/lib/process-safety-net";
+
+installCrashSafetyNet("api-server");
 
 // These ship with hardcoded fallback values (e.g. "orbit-telegram-secret") so
 // local/dev setups work out of the box — but those fallbacks are sitting in

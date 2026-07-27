@@ -2,6 +2,7 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { ZodError } from "zod";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import { Sentry, sentryEnabled } from "@/lib/sentry";
 
 /** Wraps an async route handler so rejected promises reach the error middleware. */
 export function asyncHandler(fn: RequestHandler): RequestHandler {
@@ -20,11 +21,15 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   }
 
   if (err instanceof AppError) {
-    if (err.statusCode >= 500) logger.error({ err }, err.message);
+    if (err.statusCode >= 500) {
+      logger.error({ err }, err.message);
+      if (sentryEnabled) Sentry.captureException(err);
+    }
     return res.status(err.statusCode).json({ error: err.message, details: err.details });
   }
 
   logger.error({ err }, "Unhandled error");
+  if (sentryEnabled) Sentry.captureException(err);
   return res.status(500).json({ error: "Internal server error" });
 }
 

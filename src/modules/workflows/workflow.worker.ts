@@ -1,4 +1,9 @@
 import "@/config/env"; // ensure env is validated even when this file runs as its own process
+import { initSentry, Sentry, sentryEnabled } from "@/lib/sentry";
+initSentry();
+import { installCrashSafetyNet } from "@/lib/process-safety-net";
+installCrashSafetyNet("workflow-worker");
+
 import { Worker, type Job } from "bullmq";
 import { redisConnection } from "@/lib/redis";
 import { prisma } from "@/lib/prisma";
@@ -37,6 +42,14 @@ export const workflowWorker = new Worker<WorkflowJobData>("workflow-execution", 
 
 workflowWorker.on("failed", (job, err) => {
   logger.error({ jobId: job?.id, err: err.message }, "workflow job failed after retries");
+  if (sentryEnabled) Sentry.captureException(err, { extra: { jobId: job?.id, queue: "workflow-execution" } });
+});
+
+// Connection-level errors (e.g. Redis dropped) are separate from individual
+// job failures above and would otherwise go unreported.
+workflowWorker.on("error", (err) => {
+  logger.error({ err }, "workflow worker connection error");
+  if (sentryEnabled) Sentry.captureException(err, { extra: { queue: "workflow-execution" } });
 });
 
 logger.info("Workflow worker started, waiting for jobs…");

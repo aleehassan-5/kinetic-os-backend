@@ -6,7 +6,13 @@ export class AppError extends Error {
     super(message);
     this.statusCode = statusCode;
     this.details = details;
-    Object.setPrototypeOf(this, AppError.prototype);
+    // new.target is whichever constructor was actually invoked (AppError
+    // itself, or a subclass like UnauthorizedError via super()) — using it
+    // here (instead of the hardcoded AppError.prototype) keeps `instanceof
+    // UnauthorizedError` etc. working correctly after the ES5-target
+    // Error-subclassing workaround, rather than collapsing every subclass
+    // down to plain AppError.
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
