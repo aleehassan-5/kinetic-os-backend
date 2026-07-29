@@ -9,6 +9,68 @@ import type { Channel, IntegrationType } from "@prisma/client";
 import type { ConnectChannelInput } from "./channel-connections.schema";
 import type { ChannelCredentials } from "./types";
 
+export interface TestConnectionResult {
+  valid: boolean;
+  detail: string;
+}
+
+/**
+ * Actually calls the platform's live API with the credentials the user just
+ * typed in, before we ever save or mark anything "Connected". A typo'd
+ * token used to silently save as CONNECTED with zero verification — this
+ * is the real check behind the "guided setup" claim, not a marketing label.
+ */
+export async function testConnection(input: ConnectChannelInput): Promise<TestConnectionResult> {
+  try {
+    switch (input.channel) {
+      case "WHATSAPP": {
+        const res = await fetch(
+          `https://graph.facebook.com/v20.0/${input.phoneNumberId}?fields=display_phone_number,verified_name&access_token=${input.accessToken}`
+        );
+        if (!res.ok) return { valid: false, detail: await metaErrorDetail(res) };
+        const data = (await res.json()) as { display_phone_number?: string; verified_name?: string };
+        return {
+          valid: true,
+          detail: `Verified — ${data.verified_name ?? "WhatsApp Business"} (${data.display_phone_number ?? input.phoneNumberId})`,
+        };
+      }
+      case "INSTAGRAM":
+      case "MESSENGER": {
+        const res = await fetch(
+          `https://graph.facebook.com/v20.0/${input.pageId}?fields=name&access_token=${input.pageAccessToken}`
+        );
+        if (!res.ok) return { valid: false, detail: await metaErrorDetail(res) };
+        const data = (await res.json()) as { name?: string };
+        return { valid: true, detail: `Verified — connected to "${data.name ?? input.pageId}"` };
+      }
+      case "TELEGRAM": {
+        const res = await fetch(`https://api.telegram.org/bot${input.botToken}/getMe`);
+        const data = (await res.json()) as { ok: boolean; result?: { username?: string }; description?: string };
+        if (!data.ok) return { valid: false, detail: data.description ?? "Telegram rejected this bot token" };
+        return { valid: true, detail: `Verified — bot @${data.result?.username ?? "unknown"}` };
+      }
+      case "EMAIL": {
+        // No SMTP credentials are collected on this form yet (see Known
+        // Gaps) — the only thing to check right now is that it's a
+        // plausible address, so we're honest that this isn't a live check.
+        return { valid: true, detail: "Address format looks valid (live SMTP delivery isn't tested yet)" };
+      }
+    }
+  } catch (err) {
+    logger.warn({ err: (err as Error).message, channel: input.channel }, "[channel-test] connection test failed");
+    return { valid: false, detail: "Couldn't reach the platform to verify — check your internet connection and try again" };
+  }
+}
+
+async function metaErrorDetail(res: Response): Promise<string> {
+  try {
+    const data = (await res.json()) as { error?: { message?: string } };
+    return data.error?.message ?? `Meta API rejected this (HTTP ${res.status})`;
+  } catch {
+    return `Meta API rejected this (HTTP ${res.status})`;
+  }
+}
+
 function routingKeyFor(input: ConnectChannelInput): string | null {
   switch (input.channel) {
     case "WHATSAPP":
@@ -26,19 +88,6 @@ function credentialsFor(input: ConnectChannelInput): ChannelCredentials {
   return rest as ChannelCredentials;
 }
 
-function summaryFor(input: ConnectChannelInput): string {
-  switch (input.channel) {
-    case "WHATSAPP":
-      return `Phone number ID ${input.phoneNumberId}`;
-    case "TELEGRAM":
-      return "Telegram bot connected";
-    case "INSTAGRAM":
-    case "MESSENGER":
-      return `Page ID ${input.pageId}`;
-    case "EMAIL":
-      return input.fromAddress;
-  }
-}
 
 export async function listConnections(workspaceId: string) {
   const rows = await prisma.integration.findMany({
@@ -58,6 +107,11 @@ export async function listConnections(workspaceId: string) {
 }
 
 export async function connectChannel(workspaceId: string, input: ConnectChannelInput) {
+  const testResult = await testConnection(input);
+  if (!testResult.valid) {
+    throw new AppError(`Couldn't verify these credentials: ${testResult.detail}`, 422);
+  }
+
   const credentials = credentialsFor(input);
   const routingKey = routingKeyFor(input);
 
@@ -65,7 +119,7 @@ export async function connectChannel(workspaceId: string, input: ConnectChannelI
     where: { workspaceId_type: { workspaceId, type: input.channel as IntegrationType } },
     update: {
       status: "CONNECTED",
-      detail: summaryFor(input),
+      detail: testResult.detail,
       credentials: encryptJson(credentials),
       meta: routingKey ? { routingKey } : {},
     },
@@ -73,7 +127,7 @@ export async function connectChannel(workspaceId: string, input: ConnectChannelI
       workspaceId,
       type: input.channel as IntegrationType,
       status: "CONNECTED",
-      detail: summaryFor(input),
+      detail: testResult.detail,
       credentials: encryptJson(credentials),
       meta: routingKey ? { routingKey } : {},
     },

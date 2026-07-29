@@ -14,6 +14,12 @@ export async function connectChannelHandler(req: Request, res: Response) {
   res.status(200).json(result);
 }
 
+export async function testConnectionHandler(req: Request, res: Response) {
+  const input = connectChannelSchema.parse(req.body);
+  const result = await channelConnectionsService.testConnection(input);
+  res.status(200).json(result);
+}
+
 export async function disconnectChannelHandler(req: Request, res: Response) {
   const result = await channelConnectionsService.disconnectChannel(
     req.auth!.workspaceId,
