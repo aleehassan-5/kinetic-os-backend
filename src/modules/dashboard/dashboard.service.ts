@@ -25,6 +25,8 @@ export async function getSummary(workspaceId: string) {
     meetingsPrev30,
     channelGroups,
     messagesLast30,
+    customersThisWeek,
+    customersPrevWeek,
   ] = await Promise.all([
     prisma.lead.findMany({
       where: { workspaceId, createdAt: { gte: start30 } },
@@ -50,6 +52,19 @@ export async function getSummary(workspaceId: string) {
         createdAt: { gte: start30 },
       },
       select: { direction: true, sender: true, createdAt: true },
+    }),
+    // "Customers added this week" + "expected revenue" — the exact
+    // outcome-framed language the Kinetic OS pitch promises the dashboard
+    // speaks in, instead of a generic lead count. updatedAt is used (not
+    // createdAt) since a lead is marked CLOSED some time after it first
+    // came in, and that's the moment that actually counts as a win.
+    prisma.lead.findMany({
+      where: { workspaceId, status: "CLOSED", updatedAt: { gte: start7 } },
+      select: { id: true, dealValueCents: true },
+    }),
+    prisma.lead.findMany({
+      where: { workspaceId, status: "CLOSED", updatedAt: { gte: new Date(start7.getTime() - 7 * DAY_MS), lt: start7 } },
+      select: { id: true, dealValueCents: true },
     }),
   ]);
 
@@ -109,7 +124,28 @@ export async function getSummary(workspaceId: string) {
     days.push({ date: dateKey, leads: leadsThatDay, replies: repliesThatDay });
   }
 
+  const expectedRevenueThisWeekCents = customersThisWeek.reduce(
+    (sum: number, l: { dealValueCents: number | null }) => sum + (l.dealValueCents ?? 0),
+    0
+  );
+  const expectedRevenuePrevWeekCents = customersPrevWeek.reduce(
+    (sum: number, l: { dealValueCents: number | null }) => sum + (l.dealValueCents ?? 0),
+    0
+  );
+
   return {
+    customersAddedThisWeek: {
+      value: customersThisWeek.length,
+      deltaPct: pctChange(customersThisWeek.length, customersPrevWeek.length),
+    },
+    expectedRevenueThisWeek: {
+      valueCents: expectedRevenueThisWeekCents,
+      deltaPct: pctChange(expectedRevenueThisWeekCents, expectedRevenuePrevWeekCents),
+      // Not every closed lead has a deal value set yet — surfaced so the UI
+      // can say "N of M customers have a value set" instead of implying
+      // the total is complete when it isn't.
+      customersWithValueSet: customersThisWeek.filter((l: { dealValueCents: number | null }) => l.dealValueCents != null).length,
+    },
     newLeads: {
       value: leadsLast30.length,
       deltaPct: pctChange(leadsLast30.length, leadsPrev30),

@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { listLeadsQuerySchema, replySchema } from "./leads.schema";
+import { listLeadsQuerySchema, replySchema, updateLeadSchema } from "./leads.schema";
 import * as leadsService from "./leads.service";
 
 export async function listLeadsHandler(req: Request, res: Response) {
@@ -17,4 +17,10 @@ export async function replyHandler(req: Request, res: Response) {
   const { text } = replySchema.parse(req.body);
   const result = await leadsService.sendReply(req.auth!.workspaceId, req.params.leadId, text, "AGENT");
   res.status(201).json(result);
+}
+
+export async function updateLeadHandler(req: Request, res: Response) {
+  const input = updateLeadSchema.parse(req.body);
+  const lead = await leadsService.updateLead(req.auth!.workspaceId, req.params.leadId, input);
+  res.status(200).json(lead);
 }

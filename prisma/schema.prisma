@@ -165,6 +165,10 @@ model Lead {
   phone         String?
   intentScore   Int        @default(0)
   status        LeadStatus @default(NEW)
+  // Expected/closed deal value in cents — set by the owner (or a future
+  // per-offer default). Powers the outcome-framed dashboard metric
+  // "expected revenue from this customer" instead of a vanity lead count.
+  dealValueCents Int?
   lastMessageAt DateTime?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt

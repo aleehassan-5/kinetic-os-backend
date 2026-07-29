@@ -165,3 +165,34 @@ export async function sendReply(workspaceId: string, leadId: string, text: strin
 
   return { message, delivered: result.delivered };
 }
+
+export async function updateLead(
+  workspaceId: string,
+  leadId: string,
+  input: { status?: LeadStatus; dealValue?: number | null }
+) {
+  const lead = await prisma.lead.findFirst({ where: { id: leadId, workspaceId } });
+  if (!lead) throw new NotFoundError("Lead not found");
+
+  const wasAlreadyClosed = lead.status === "CLOSED";
+
+  const updated = await prisma.lead.update({
+    where: { id: leadId },
+    data: {
+      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.dealValue !== undefined
+        ? { dealValueCents: input.dealValue === null ? null : Math.round(input.dealValue * 100) }
+        : {}),
+    },
+  });
+
+  if (input.status === "CLOSED" && !wasAlreadyClosed) {
+    await createNotification(workspaceId, {
+      type: "LEAD",
+      title: "New customer added",
+      description: `${lead.name ?? lead.email ?? "A lead"} was marked as closed/won.`,
+    });
+  }
+
+  return updated;
+}
