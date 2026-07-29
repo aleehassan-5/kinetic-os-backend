@@ -5,6 +5,7 @@ import { z } from "zod";
 import { asyncHandler } from "@/middleware/error-handler";
 import { requireAuth } from "@/middleware/auth";
 import { answerWithKnowledgeBase } from "./chat.service";
+import { getVoiceProfileStatus } from "./voice-profile";
 
 // Each request here can trigger a real (billed) OpenAI call, so it needs a
 // tighter cap than the general API — this keeps a single workspace from
@@ -30,8 +31,14 @@ async function chatHandler(req: Request, res: Response) {
   res.status(200).json(result);
 }
 
+async function voiceProfileStatusHandler(req: Request, res: Response) {
+  const status = await getVoiceProfileStatus(req.auth!.workspaceId);
+  res.status(200).json(status);
+}
+
 const router = Router();
 router.use(requireAuth);
 router.post("/", chatLimiter, asyncHandler(chatHandler));
+router.get("/voice-profile", asyncHandler(voiceProfileStatusHandler));
 
 export default router;

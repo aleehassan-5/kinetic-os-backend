@@ -1,8 +1,9 @@
 import { embedText } from "@/modules/knowledge/embeddings";
 import { retrieveRelevantChunks } from "@/modules/knowledge/knowledge.service";
 import { generateChatCompletion, type ChatMessage } from "./llm";
+import { buildVoiceInstruction } from "./voice-profile";
 
-const SYSTEM_PROMPT = `You are the Kinetic OS assistant, a helpful assistant answering questions strictly using the provided context from the business's knowledge base. If the answer isn't in the context, say you don't have that information yet instead of guessing. Keep answers concise and friendly.`;
+const BASE_SYSTEM_PROMPT = `You are the Kinetic OS assistant, a helpful assistant answering questions strictly using the provided context from the business's knowledge base. If the answer isn't in the context, say you don't have that information yet instead of guessing. Keep answers concise and friendly.`;
 
 export interface ChatTurn {
   role: "user" | "assistant";
@@ -27,8 +28,11 @@ export async function answerWithKnowledgeBase(workspaceId: string, history: Chat
     ? chunks.map((c, i) => `[${i + 1}] (from "${c.documentTitle}")\n${c.content}`).join("\n\n")
     : "No knowledge base documents are indexed yet.";
 
+  const voiceInstruction = await buildVoiceInstruction(workspaceId);
+
   const messages: ChatMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: BASE_SYSTEM_PROMPT },
+    ...(voiceInstruction ? [{ role: "system" as const, content: voiceInstruction }] : []),
     { role: "system", content: `Context:\n${context}` },
     ...history.map((h) => ({ role: h.role, content: h.content }) as ChatMessage),
   ];

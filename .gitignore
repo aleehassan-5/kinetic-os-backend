@@ -16,3 +16,4 @@ npm-debug.log*
 
 # prisma
 prisma/*.db
+.commit-msg.txt

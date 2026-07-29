@@ -29,7 +29,7 @@ Server runs on `http://localhost:4000` by default.
 | `auth` | Signup/login, JWT access+refresh, Google OAuth linking |
 | `workspace` | Workspace settings, team members & role management |
 | `leads` | Lead ingestion, intent scoring, CRUD |
-| `chat` | LLM-powered conversational assistant (rate-limited per workspace) |
+| `chat` | LLM-powered conversational assistant (rate-limited per workspace), with real tone-learning from the owner's own sent replies (`voice-profile.ts`) once there are enough of them — see below |
 | `workflows` | Automation engine with job queue (trigger → score → condition → action) |
 | `knowledge` | Document ingestion, chunking, embeddings for RAG (ingestion is rate-limited) |
 | `meetings` | List of booked meetings — rows are created by real Calendly/Google Calendar bookings (see Known Gaps) |
@@ -42,6 +42,7 @@ Server runs on `http://localhost:4000` by default.
 
 ## Known Gaps
 
+- **Tone-learning is real but simple.** `src/modules/chat/voice-profile.ts` pulls the owner's own most-recently-sent replies (Message rows with `sender: "AGENT"`, i.e. actually typed and sent by a person, never AI-generated ones) and feeds a handful of them into the AI's system prompt as style examples, once there are at least 5. Below that threshold it stays generic rather than personalizing off too little signal. What this is *not* yet: a persistent "learned profile" that survives independent of recent message history, decision-pattern learning beyond writing style, or the "light, unobtrusive prompts" the pitch describes for actively soliciting preferences — right now it's purely passive (learns only from replies the owner sends anyway).
 - **Calendly / Google Calendar are real, but need your own credentials to actually run**: `calendar_book` workflow actions generate a real Calendly scheduling link or create a real Google Calendar event — no more logging-and-pretending. Calendly bookings create a real `Meeting` row only once the lead actually books, via the `/webhooks/calendly` webhook (register it in your Calendly account). Google Calendar bookings create the `Meeting` row immediately since there's no separate booking step. Both require env vars — see below — that don't come with the repo.
 - HubSpot / Google Sheets CRM sync are similarly real but require your own credentials (same pattern as above).
 - No real per-workspace OAuth connect flow for these four yet (unlike the messaging channels) — they're configured once via env vars for the whole deployment, not per-workspace in Settings.
