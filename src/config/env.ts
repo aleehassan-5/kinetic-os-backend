@@ -42,7 +42,7 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().default(587),
   SMTP_USER: z.string().optional().default(""),
   SMTP_PASS: z.string().optional().default(""),
-  SMTP_FROM: z.string().default("Orbit AI <hello@orbitai.agency>"),
+  SMTP_FROM: z.string().default("Kinetic OS <hello@kineticos.app>"),
   INBOUND_EMAIL_WEBHOOK_SECRET: z.string().default("orbit-email-secret"),
 
   CALENDLY_ACCESS_TOKEN: z.string().optional().default(""),
@@ -59,7 +59,7 @@ const envSchema = z.object({
   // this specific calendar with that service account email as an editor.
   GOOGLE_CALENDAR_ID: z.string().optional().default(""),
 
-  // The externally-reachable base URL of this API (e.g. https://api.orbitai.com
+  // The externally-reachable base URL of this API (e.g. https://api.kineticos.app
   // or an ngrok/tunnel URL in dev). Needed to build real, stable, publicly
   // fetchable links to locally-generated media (graphics/voiceovers/reels) —
   // Instagram/TikTok/Facebook's publish APIs fetch media server-side from a

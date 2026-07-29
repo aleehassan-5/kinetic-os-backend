@@ -127,7 +127,7 @@ async function runCalendarBook(action: WorkflowActionData, ctx: WorkflowExecutio
 
     const event = await createCalendarEvent({
       summary: `Call with ${lead.name ?? lead.email ?? "lead"}`,
-      description: `Booked automatically by Orbit AI for lead ${lead.id}.`,
+      description: `Booked automatically by Kinetic OS for lead ${lead.id}.`,
       startTime,
       endTime,
       attendeeEmail: lead.email,

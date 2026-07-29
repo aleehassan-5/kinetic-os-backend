@@ -5,15 +5,15 @@ async function main() {
   const passwordHash = await hashPassword("password123");
 
   const workspace = await prisma.workspace.upsert({
-    where: { slug: "growth-workspace" },
+    where: { slug: "moiz-real-estate" },
     update: {},
-    create: { name: "Growth workspace", slug: "growth-workspace", industry: "agency" },
+    create: { name: "Moiz Real Estate", slug: "moiz-real-estate", industry: "real_estate" },
   });
 
   const user = await prisma.user.upsert({
-    where: { email: "are.khan@orbitai.agency" },
+    where: { email: "admin@kineticos.app" },
     update: {},
-    create: { email: "are.khan@orbitai.agency", name: "Are Khan", passwordHash },
+    create: { email: "admin@kineticos.app", name: "Moiz", passwordHash },
   });
 
   await prisma.membership.upsert({
@@ -55,9 +55,9 @@ async function main() {
       platform: "INSTAGRAM",
       contentType: "REEL",
       status: "SCHEDULED",
-      title: "3 signs your funnel is leaking",
-      prompt: "Quick-hit reel about common lead-funnel drop-off points and how automation fixes them.",
-      caption: "3 signs your funnel is leaking 🚨 #automation #AI #leadgen",
+      title: "3 signs you're losing buyers before you even call them back",
+      prompt: "Quick-hit reel about missed real-estate inquiries and how an always-on assistant fixes them.",
+      caption: "3 signs you're losing buyers before you even call them back 🏡 #realestate #automation",
       useVoiceover: true,
       scheduledAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
     },
@@ -73,8 +73,8 @@ async function main() {
       platform: "FACEBOOK",
       contentType: "STATIC_GRAPHIC",
       status: "DRAFT",
-      title: "Client testimonial — Hamza Traders",
-      prompt: "Testimonial graphic quoting a happy client about faster lead response times.",
+      title: "New listing — 3 bed family home",
+      prompt: "Clean listing graphic for a 3-bedroom family home, highlighting price and a scheduling link.",
     },
   });
 

@@ -1,6 +1,6 @@
-# Orbit AI — Backend
+# Kinetic OS — Backend
 
-API server for **Orbit AI**, an omni-channel AI automation platform: lead capture & scoring, AI chat, workflow automation, social content scheduling, and billing.
+API server for **Kinetic OS**, the Isolated Workspace platform: lead capture & scoring, AI chat that learns the owner's tone, workflow automation, social content scheduling, and billing — built by Lead Sync Intelligence.
 
 ## Tech Stack
 
@@ -34,7 +34,7 @@ Server runs on `http://localhost:4000` by default.
 | `knowledge` | Document ingestion, chunking, embeddings for RAG (ingestion is rate-limited) |
 | `meetings` | List of booked meetings — rows are created by real Calendly/Google Calendar bookings (see Known Gaps) |
 | `social` | Content generation, scheduling, and publishing across Instagram/Facebook/TikTok/LinkedIn |
-| `dashboard` | Aggregated workspace metrics (leads, reply rate, meetings, intent score, channel mix) |
+| `dashboard` | Aggregated workspace metrics, framed as outcomes (new customers, hours reclaimed, meetings booked, buying intent) rather than raw platform stats |
 | `settings` | API key generation/revocation, read-only integration status |
 | `notifications` | In-app notification delivery |
 | `billing` | Lemon Squeezy subscriptions & webhooks |
@@ -93,6 +93,15 @@ Without Docker: `npm run build && npm start` for the API, `npm run worker` and `
 
 Set `SENTRY_DSN` (see `.env.example`) to report errors to Sentry instead of only logging locally. Covers: unhandled 5xx errors in Express request handlers, uncaught exceptions and unhandled promise rejections at the process level (in all three processes — API server, workflow worker, social worker), and BullMQ job failures/connection errors. Without a DSN configured, none of this reporting happens — errors are still logged locally via `pino`, just not sent anywhere.
 
+## Product Philosophy
+
+Per the Business Mechanics Addendum, every number this backend surfaces to the frontend is meant
+to read as a business outcome, not a platform mechanic. `hoursReclaimed` in `dashboard.service.ts`
+is a concrete example: rather than reporting a raw "AI reply rate %", it converts AI-handled
+replies into an estimated hours-saved figure, using a deliberately conservative per-reply time
+estimate (see the comment in that file) so the number stays defensible rather than a marketing
+exaggeration.
+
 ## Status
 
-Actively in development. See the [frontend repo](https://github.com/aleehassan-5/orbit-ai-frontend) for the UI.
+Actively in development. See the [frontend repo](https://github.com/aleehassan-5/kinetic-os-frontend) for the UI.

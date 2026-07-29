@@ -67,7 +67,7 @@ export const emailAdapter: ChannelAdapter = {
     const info = await t.sendMail({
       from: env.SMTP_FROM,
       to: message.externalId,
-      subject: "Re: your message to Orbit AI",
+      subject: "Re: your message to Kinetic OS",
       text: message.text,
     });
 

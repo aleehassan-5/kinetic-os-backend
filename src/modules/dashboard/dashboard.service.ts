@@ -64,6 +64,21 @@ export async function getSummary(workspaceId: string) {
   const outboundCount = messagesLast30.filter((m: MessageRow) => m.direction === "OUTBOUND").length;
   const aiReplyRate = inboundCount === 0 ? 0 : Math.min(100, Math.round((outboundCount / inboundCount) * 1000) / 10);
 
+  // Outcome framing: every automated reply is a reply the owner didn't have to
+  // type himself. MINUTES_SAVED_PER_REPLY is a deliberately conservative
+  // estimate (reading the inbound message, thinking, and typing a reply by
+  // hand) so this stays a defensible number, not a marketing exaggeration.
+  const MINUTES_SAVED_PER_REPLY = 6;
+  const outboundPrev30 = await prisma.message.count({
+    where: {
+      conversation: { workspaceId },
+      direction: "OUTBOUND",
+      createdAt: { gte: start60, lt: start30 },
+    },
+  });
+  const hoursReclaimed = Math.round(((outboundCount * MINUTES_SAVED_PER_REPLY) / 60) * 10) / 10;
+  const hoursReclaimedPrev = Math.round(((outboundPrev30 * MINUTES_SAVED_PER_REPLY) / 60) * 10) / 10;
+
   const avgIntentScore =
     leadsLast30.length === 0
       ? 0
@@ -102,6 +117,10 @@ export async function getSummary(workspaceId: string) {
     aiReplyRate: {
       value: aiReplyRate,
       deltaPct: null, // no cheap prior-period comparison without a second full message scan; frontend hides the delta when null
+    },
+    hoursReclaimed: {
+      value: hoursReclaimed,
+      deltaPct: pctChange(hoursReclaimed, hoursReclaimedPrev),
     },
     meetingsBooked: {
       value: meetingsLast30,

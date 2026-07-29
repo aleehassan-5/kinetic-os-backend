@@ -2,7 +2,7 @@ import { embedText } from "@/modules/knowledge/embeddings";
 import { retrieveRelevantChunks } from "@/modules/knowledge/knowledge.service";
 import { generateChatCompletion, type ChatMessage } from "./llm";
 
-const SYSTEM_PROMPT = `You are Orbit AI, a helpful assistant answering questions strictly using the provided context from the business's knowledge base. If the answer isn't in the context, say you don't have that information yet instead of guessing. Keep answers concise and friendly.`;
+const SYSTEM_PROMPT = `You are the Kinetic OS assistant, a helpful assistant answering questions strictly using the provided context from the business's knowledge base. If the answer isn't in the context, say you don't have that information yet instead of guessing. Keep answers concise and friendly.`;
 
 export interface ChatTurn {
   role: "user" | "assistant";

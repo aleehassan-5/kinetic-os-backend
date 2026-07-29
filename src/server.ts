@@ -72,7 +72,7 @@ async function main() {
   subscribeWorkflowsToEvents();
 
   const server = app.listen(env.PORT, () => {
-    logger.info(`Orbit AI backend listening on http://localhost:${env.PORT}`);
+    logger.info(`Kinetic OS backend listening on http://localhost:${env.PORT}`);
     logger.info(`Health check: http://localhost:${env.PORT}/health`);
   });
 

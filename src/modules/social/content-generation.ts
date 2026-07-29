@@ -20,7 +20,7 @@ async function localStubGraphic(title: string, contentType: SocialContentType): 
   <text x="80" y="520" fill="#FFFFFF" font-family="sans-serif" font-size="52" font-weight="700">
     <tspan x="80" dy="0">${safeTitle}</tspan>
   </text>
-  <text x="80" y="1000" fill="#7C5CFF" font-family="sans-serif" font-size="28">Orbit AI — auto-generated</text>
+  <text x="80" y="1000" fill="#7C5CFF" font-family="sans-serif" font-size="28">Kinetic OS — auto-generated</text>
 </svg>`;
   return saveDataUrl(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
 }

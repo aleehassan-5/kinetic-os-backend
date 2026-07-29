@@ -38,15 +38,15 @@ export async function sendMail(input: { to: string; subject: string; html: strin
 
 export function inviteEmailTemplate(input: { workspaceName: string; inviterName: string; role: string; signupUrl: string }) {
   return {
-    subject: `You've been invited to join ${input.workspaceName} on Orbit AI`,
+    subject: `You've been invited to join ${input.workspaceName} on Kinetic OS`,
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-        <h2>You're invited to Orbit AI</h2>
+        <h2>You're invited to Kinetic OS</h2>
         <p>${input.inviterName} invited you to join <strong>${input.workspaceName}</strong> as a <strong>${input.role.toLowerCase()}</strong>.</p>
         <p><a href="${input.signupUrl}" style="display:inline-block;padding:10px 18px;background:#7C5CFF;color:#fff;border-radius:6px;text-decoration:none;">Accept invite</a></p>
         <p style="color:#888;font-size:12px;">If you weren't expecting this, you can ignore this email.</p>
       </div>
     `,
-    text: `${input.inviterName} invited you to join ${input.workspaceName} on Orbit AI as a ${input.role.toLowerCase()}. Accept: ${input.signupUrl}`,
+    text: `${input.inviterName} invited you to join ${input.workspaceName} on Kinetic OS as a ${input.role.toLowerCase()}. Accept: ${input.signupUrl}`,
   };
 }

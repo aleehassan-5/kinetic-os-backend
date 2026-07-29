@@ -5,7 +5,7 @@ import { env } from "@/config/env";
 // isn't set, from JWT_ACCESS_SECRET so there's no extra required setup in
 // dev/single-tenant deployments). Set a dedicated CREDENTIALS_ENCRYPTION_KEY
 // in production.
-const key = scryptSync(env.CREDENTIALS_ENCRYPTION_KEY || env.JWT_ACCESS_SECRET, "orbit-ai-credentials", 32);
+const key = scryptSync(env.CREDENTIALS_ENCRYPTION_KEY || env.JWT_ACCESS_SECRET, "kinetic-os-credentials", 32);
 
 /** Encrypts an arbitrary JSON-serializable value for storage in a Json column. Format: iv:authTag:ciphertext (all hex). */
 export function encryptJson(value: unknown): string {
