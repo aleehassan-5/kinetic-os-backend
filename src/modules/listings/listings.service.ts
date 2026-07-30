@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { NotFoundError } from "@/lib/errors";
+import { logger } from "@/lib/logger";
 import { generateChatCompletion } from "@/modules/chat/llm";
-import { createPost } from "@/modules/social/social.service";
+import { createPost, listAccounts } from "@/modules/social/social.service";
+import { createNotification } from "@/modules/notifications/notifications.service";
 import type { SocialPlatform } from "@prisma/client";
 
 export async function listListings(workspaceId: string, status?: string) {
@@ -110,4 +112,37 @@ export async function proposeAndGenerateContentPlan(
   }
 
   return { audience: plan.audience, posts: createdPosts };
+}
+
+/**
+ * The "steps in on its own" half of the pitch: fired automatically the
+ * moment a new listing is created (see listings.controller.ts), not behind
+ * a button the owner has to remember to click. Picks whichever platforms
+ * the workspace already has connected (falls back to Instagram alone if
+ * none are connected yet, so it still produces something reviewable),
+ * drafts a small plan, and then tells the owner it's done via a real
+ * notification — the same content pipeline as the manual endpoint, just
+ * initiated by the system instead of a click.
+ */
+export async function autoProposeContentPlan(workspaceId: string, listingId: string): Promise<void> {
+  try {
+    const listing = await getListing(workspaceId, listingId);
+    const accounts = await listAccounts(workspaceId);
+    const connectedPlatforms = Array.from(
+      new Set(accounts.filter((a: { status: string }) => a.status === "CONNECTED").map((a: { platform: SocialPlatform }) => a.platform))
+    ) as SocialPlatform[];
+    const platforms = connectedPlatforms.length > 0 ? connectedPlatforms.slice(0, 2) : (["INSTAGRAM"] as SocialPlatform[]);
+
+    const { posts } = await proposeAndGenerateContentPlan(workspaceId, listingId, platforms, 2);
+
+    await createNotification(workspaceId, {
+      type: "SYSTEM",
+      title: "New content ideas ready to review",
+      description: `Drafted ${posts.length} post idea(s) for "${listing.title}" — review and schedule them from the Social Scheduler.`,
+    });
+  } catch (err) {
+    // Never let a background content-suggestion failure affect the listing
+    // itself — the owner can still trigger the manual endpoint if this fails.
+    logger.error({ err: (err as Error).message, workspaceId, listingId }, "auto content-plan generation failed");
+  }
 }

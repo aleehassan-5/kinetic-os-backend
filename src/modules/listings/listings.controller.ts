@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { logger } from "@/lib/logger";
 import * as listingsService from "./listings.service";
 import { createListingSchema, updateListingSchema, contentPlanRequestSchema } from "./listings.schema";
 
@@ -16,6 +17,13 @@ export async function createListingHandler(req: Request, res: Response) {
   const input = createListingSchema.parse(req.body);
   const listing = await listingsService.createListing(req.auth!.workspaceId, input);
   res.status(201).json(listing);
+
+  // Fire-and-forget: the pitch is that the content engine "steps in on its
+  // own" the moment a listing exists, not that the owner has to wait for it
+  // before getting a response back.
+  listingsService.autoProposeContentPlan(req.auth!.workspaceId, listing.id).catch((err) => {
+    logger.error({ err: (err as Error).message }, "autoProposeContentPlan trigger failed");
+  });
 }
 
 export async function updateListingHandler(req: Request, res: Response) {
