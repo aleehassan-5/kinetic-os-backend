@@ -50,10 +50,27 @@ export async function testConnection(input: ConnectChannelInput): Promise<TestCo
         return { valid: true, detail: `Verified — bot @${data.result?.username ?? "unknown"}` };
       }
       case "EMAIL": {
-        // No SMTP credentials are collected on this form yet (see Known
-        // Gaps) — the only thing to check right now is that it's a
-        // plausible address, so we're honest that this isn't a live check.
-        return { valid: true, detail: "Address format looks valid (live SMTP delivery isn't tested yet)" };
+        // Sending uses one shared SMTP account configured via env vars
+        // (SMTP_HOST/USER/PASS), not per-workspace credentials — most teams
+        // share one sending domain anyway (see email.adapter.ts). So the
+        // real thing worth testing here is whether that shared account is
+        // actually configured and reachable, not the address the user typed.
+        if (!env.SMTP_HOST) {
+          return { valid: false, detail: "No SMTP account is configured for this deployment yet — ask whoever set this up to add SMTP_HOST/SMTP_USER/SMTP_PASS." };
+        }
+        const nodemailer = await import("nodemailer");
+        const transporter = nodemailer.createTransport({
+          host: env.SMTP_HOST,
+          port: env.SMTP_PORT,
+          secure: env.SMTP_PORT === 465,
+          auth: env.SMTP_USER ? { user: env.SMTP_USER, pass: env.SMTP_PASS } : undefined,
+        });
+        try {
+          await transporter.verify();
+          return { valid: true, detail: `Verified — outgoing mail will send from ${env.SMTP_FROM}` };
+        } catch (err) {
+          return { valid: false, detail: `Couldn't connect to the mail server: ${(err as Error).message}` };
+        }
       }
     }
   } catch (err) {
