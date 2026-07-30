@@ -24,6 +24,7 @@ import channelConnectionsRoutes from "@/modules/channels/channel-connections.rou
 import apiKeysRoutes from "@/modules/settings/api-keys.routes";
 import integrationsRoutes from "@/modules/settings/integrations.routes";
 import meetingsRoutes from "@/modules/meetings/meetings.routes";
+import listingsRoutes from "@/modules/listings/listings.routes";
 
 export const app = express();
 
@@ -62,6 +63,7 @@ app.use("/dashboard", dashboardRoutes);
 app.use("/api-keys", apiKeysRoutes);
 app.use("/integrations", integrationsRoutes);
 app.use("/meetings", meetingsRoutes);
+app.use("/listings", listingsRoutes);
 app.use("/notifications", notificationsRoutes);
 app.use("/team", teamRoutes);
 app.use("/workspace", workspaceRoutes);

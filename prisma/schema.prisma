@@ -34,6 +34,7 @@ model Workspace {
   workflows     Workflow[]
   apiKeys       ApiKey[]
   notifications Notification[]
+  listings      Listing[]
   subscription  Subscription?
   invoices      Invoice[]
   socialAccounts SocialAccount[]
@@ -153,6 +154,33 @@ enum LeadStatus {
   MEETING_BOOKED
   CLOSED
   LOST
+}
+
+enum ListingStatus {
+  ACTIVE
+  PAUSED
+  SOLD
+}
+
+// Generic "current offer" the owner is trying to move — a property for a
+// real estate agent, a package for a clinic, etc. Named "Listing" after the
+// primary beachhead niche (real estate) but usable more broadly. This is
+// what the content engine proposes marketing plans for.
+model Listing {
+  id          String        @id @default(cuid())
+  workspaceId String
+  title       String
+  description String?
+  priceLabel  String? // free-text so it fits "$450,000", "Starting at $99/mo", etc. across niches
+  location    String?
+  imageUrl    String?
+  status      ListingStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
 }
 
 model Lead {
@@ -413,6 +441,7 @@ model SocialPost {
   externalPostId String?
   error          String?
   jobId          String? // BullMQ job id backing the scheduled publish, so it can be cancelled/rescheduled
+  listingId      String? // set when this post was generated from a Listing's AI content plan
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
