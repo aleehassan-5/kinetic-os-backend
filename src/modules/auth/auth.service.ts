@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { hashPassword, comparePassword, hashToken } from "@/lib/password";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "@/lib/jwt";
-import { ConflictError, UnauthorizedError } from "@/lib/errors";
+import { ConflictError, UnauthorizedError, ForbiddenError } from "@/lib/errors";
 import type { LoginInput, RegisterInput } from "./auth.schema";
 import type { GoogleProfile } from "@/lib/google-oauth";
 import type { Prisma } from "@prisma/client";
@@ -31,6 +31,14 @@ async function issueTokenPair(userId: string, workspaceId: string, role: string)
 }
 
 export async function register(input: RegisterInput) {
+  // This is deployed per-client as a single-tenant instance — the first
+  // person to sign up owns it, and the door closes after that. New team
+  // members join via invite (POST /team/invite) instead, not open signup.
+  const existingWorkspaceCount = await prisma.workspace.count();
+  if (existingWorkspaceCount > 0) {
+    throw new ForbiddenError("Signups are closed — this instance is already set up for a business. Ask your admin for a team invite instead.");
+  }
+
   const existing = await prisma.user.findUnique({ where: { email: input.email } });
   if (existing) throw new ConflictError("An account with this email already exists");
 
@@ -141,7 +149,15 @@ export async function loginWithGoogle(profile: GoogleProfile) {
   }
 
   // 3) Brand new person — create their workspace the same way register() does.
+  //    Same single-tenant lock as register(): only the first signup gets to
+  //    create a workspace this way. Existing members (paths 1/2 above) keep
+  //    working normally regardless — this only blocks new outsiders.
   if (!user) {
+    const existingWorkspaceCount = await prisma.workspace.count();
+    if (existingWorkspaceCount > 0) {
+      throw new ForbiddenError("Signups are closed — this instance is already set up for a business. Ask your admin for a team invite instead.");
+    }
+
     const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const workspaceName = `${profile.name}'s Workspace`;
       const workspace = await tx.workspace.create({

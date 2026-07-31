@@ -103,6 +103,10 @@ replies into an estimated hours-saved figure, using a deliberately conservative 
 estimate (see the comment in that file) so the number stays defensible rather than a marketing
 exaggeration.
 
+## Deployment Model
+
+This is sold and deployed as a single-tenant instance per client, not an open multi-tenant SaaS anyone can sign up to. `POST /auth/register` (and the equivalent brand-new-user path in `POST /auth/google/callback`) only works once — the first person to sign up owns the instance, and the door closes after that (`ForbiddenError`). Additional people join via team invites (`POST /team/invite`, requires OWNER/ADMIN), not public signup. There's no "forgot password" flow — the frontend link for it was removed since there was never a backend endpoint behind it.
+
 ## Status
 
 Actively in development. See the [frontend repo](https://github.com/aleehassan-5/kinetic-os-frontend) for the UI.

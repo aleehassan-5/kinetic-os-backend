@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const { prismaMock } = vi.hoisted(() => {
   const mock: any = {
     user: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), create: vi.fn(), update: vi.fn() },
-    workspace: { create: vi.fn(), findUnique: vi.fn() },
+    workspace: { create: vi.fn(), findUnique: vi.fn(), count: vi.fn() },
     membership: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), findUniqueOrThrow: vi.fn(), findMany: vi.fn() },
     integration: { createMany: vi.fn(), findMany: vi.fn() },
     refreshToken: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
@@ -16,7 +16,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 import { register, login, refresh, logout } from "@/modules/auth/auth.service";
 import { hashPassword, hashToken } from "@/lib/password";
 import { signRefreshToken } from "@/lib/jwt";
-import { ConflictError, UnauthorizedError } from "@/lib/errors";
+import { ConflictError, UnauthorizedError, ForbiddenError } from "@/lib/errors";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -24,6 +24,7 @@ beforeEach(() => {
 
 describe("auth.service — register", () => {
   it("creates a workspace + user + membership and returns tokens, never the password hash", async () => {
+    prismaMock.workspace.count.mockResolvedValue(0); // first signup on this instance
     prismaMock.user.findUnique.mockResolvedValue(null); // no existing account
     prismaMock.workspace.create.mockResolvedValue({ id: "ws1", name: "Acme", slug: "acme-abcde" });
     prismaMock.user.create.mockResolvedValue({
@@ -51,6 +52,7 @@ describe("auth.service — register", () => {
   });
 
   it("rejects signup with an email that's already registered", async () => {
+    prismaMock.workspace.count.mockResolvedValue(0);
     prismaMock.user.findUnique.mockResolvedValue({ id: "existing", email: "ali@example.com" });
 
     await expect(
@@ -58,6 +60,32 @@ describe("auth.service — register", () => {
     ).rejects.toBeInstanceOf(ConflictError);
 
     expect(prismaMock.workspace.create).not.toHaveBeenCalled(); // must not create anything on conflict
+  });
+
+  it("blocks signup once a business already exists on this instance — single-tenant, not open multi-tenant", async () => {
+    prismaMock.workspace.count.mockResolvedValue(1); // someone already signed up
+
+    await expect(
+      register({ name: "Someone Else", email: "outsider@example.com", password: "supersecret1", workspaceName: "Other Co" })
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    // Must not even check for an email conflict or touch the DB further — the door is just closed.
+    expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
+    expect(prismaMock.workspace.create).not.toHaveBeenCalled();
+  });
+
+  it("allows exactly the first signup through when the instance is brand new", async () => {
+    prismaMock.workspace.count.mockResolvedValue(0);
+    prismaMock.user.findUnique.mockResolvedValue(null);
+    prismaMock.workspace.create.mockResolvedValue({ id: "ws1", name: "Acme", slug: "acme-abcde" });
+    prismaMock.user.create.mockResolvedValue({ id: "u1", name: "Ali", email: "ali@example.com", passwordHash: "hashed" });
+    prismaMock.membership.create.mockResolvedValue({ id: "m1", userId: "u1", workspaceId: "ws1", role: "OWNER" });
+    prismaMock.integration.createMany.mockResolvedValue({ count: 9 });
+    prismaMock.refreshToken.create.mockResolvedValue({});
+
+    const result = await register({ name: "Ali", email: "ali@example.com", password: "supersecret1", workspaceName: "Acme" });
+
+    expect(result.accessToken).toBeTypeOf("string");
   });
 });
 
