@@ -56,7 +56,7 @@ describe("checkin.service — real signals trigger a real LLM-generated briefing
 
     expect(result.signals.highIntentUnattendedLeads).toHaveLength(1);
     expect(generateChatCompletionMock).toHaveBeenCalled();
-    const promptArg = generateChatCompletionMock.mock.calls[0][0];
+    const promptArg = generateChatCompletionMock.mock.calls[0][1];
     const userMessage = promptArg.find((m: any) => m.role === "user").content;
     expect(userMessage).toContain("Fatima");
   });
