@@ -71,14 +71,14 @@ export async function generateAndSchedulePost(workspaceId: string, postId: strin
   await prisma.socialPost.update({ where: { id: post.id }, data: { status: "GENERATING", error: null } });
 
   try {
-    const assets = await generatePostAssets(post.title, post.prompt ?? undefined, post.contentType);
+    const assets = await generatePostAssets(workspaceId, post.title, post.prompt ?? undefined, post.contentType);
 
     let voiceoverUrl: string | null = null;
     let mediaUrl = assets.mediaUrl;
     const isVideoPost = post.contentType === "REEL" || post.contentType === "STORY";
 
     if (post.useVoiceover && assets.script) {
-      const voice = await generateVoiceover(assets.script);
+      const voice = await generateVoiceover(workspaceId, assets.script);
       voiceoverUrl = voice.voiceoverUrl;
 
       if (isVideoPost && voiceoverUrl) {

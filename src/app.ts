@@ -25,6 +25,7 @@ import apiKeysRoutes from "@/modules/settings/api-keys.routes";
 import integrationsRoutes from "@/modules/settings/integrations.routes";
 import meetingsRoutes from "@/modules/meetings/meetings.routes";
 import listingsRoutes from "@/modules/listings/listings.routes";
+import aiProvidersRoutes from "@/modules/ai-providers/ai-providers.routes";
 
 export const app = express();
 
@@ -71,6 +72,7 @@ app.use("/billing", billingRoutes);
 app.use("/social", socialRoutes);
 app.use("/webhooks/social", socialWebhooksRoutes);
 app.use("/channel-connections", channelConnectionsRoutes);
+app.use("/ai-providers", aiProvidersRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

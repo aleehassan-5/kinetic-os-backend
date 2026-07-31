@@ -1,6 +1,7 @@
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 import { generateChatCompletion } from "@/modules/chat/llm";
+import { resolveAiKey } from "@/modules/ai-providers/ai-providers.service";
 import { saveDataUrl, rehostRemoteUrl } from "@/lib/media-storage";
 import type { SocialContentType } from "@prisma/client";
 import type { GeneratedAsset } from "./social.types";
@@ -25,35 +26,36 @@ async function localStubGraphic(title: string, contentType: SocialContentType): 
   return saveDataUrl(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
 }
 
-async function generateCaption(title: string, prompt: string | undefined, contentType: SocialContentType): Promise<string> {
+async function generateCaption(workspaceId: string, title: string, prompt: string | undefined, contentType: SocialContentType): Promise<string> {
   const brief = `Write a short, high-engagement social caption for a ${contentType.toLowerCase().replace("_", " ")} post titled "${title}". ${
     prompt ? `Context: ${prompt}` : ""
   } Keep it under 220 characters, end with 3-4 relevant hashtags. Return ONLY the caption text, nothing else.`;
 
-  const text = await generateChatCompletion([
+  const text = await generateChatCompletion(workspaceId, [
     { role: "system", content: "You are a social media copywriter for a B2B AI automation agency." },
     { role: "user", content: brief },
   ]);
   return text.trim();
 }
 
-async function generateReelScript(title: string, prompt: string | undefined): Promise<string> {
+async function generateReelScript(workspaceId: string, title: string, prompt: string | undefined): Promise<string> {
   const brief = `Write a 20-25 second voiceover script (roughly 60-70 words) for a short-form video reel titled "${title}". ${
     prompt ? `Context: ${prompt}` : ""
   } Punchy hook in the first line, one clear takeaway, end with a soft call-to-action. Return ONLY the script text.`;
 
   return (
-    await generateChatCompletion([
+    await generateChatCompletion(workspaceId, [
       { role: "system", content: "You are a scriptwriter for short-form marketing video reels." },
       { role: "user", content: brief },
     ])
   ).trim();
 }
 
-async function generateGraphicViaOpenAI(title: string, prompt: string | undefined): Promise<string> {
+async function generateGraphicViaOpenAI(workspaceId: string, title: string, prompt: string | undefined): Promise<string> {
+  const apiKey = await resolveAiKey(workspaceId, "OPENAI");
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
-    headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: env.OPENAI_IMAGE_MODEL,
       prompt: `Clean, modern social media marketing graphic. Title/hook: "${title}". ${prompt ?? ""}. Bold typography, on-brand purple/dark palette, no watermarks.`,
@@ -81,25 +83,27 @@ async function generateGraphicViaOpenAI(title: string, prompt: string | undefine
  * a caption, and (for video content types) a voiceover script.
  */
 export async function generatePostAssets(
+  workspaceId: string,
   title: string,
   prompt: string | undefined,
   contentType: SocialContentType
 ): Promise<GeneratedAsset> {
   const isVideo = contentType === "REEL" || contentType === "STORY";
+  const openAiKey = await resolveAiKey(workspaceId, "OPENAI");
 
   const [caption, script, mediaUrl] = await Promise.all([
-    generateCaption(title, prompt, contentType).catch((err) => {
+    generateCaption(workspaceId, title, prompt, contentType).catch((err) => {
       logger.warn({ err: (err as Error).message }, "[social] caption generation failed, using fallback");
       return `${title} ✨ #automation #AI #growth`;
     }),
     isVideo
-      ? generateReelScript(title, prompt).catch((err) => {
+      ? generateReelScript(workspaceId, title, prompt).catch((err) => {
           logger.warn({ err: (err as Error).message }, "[social] script generation failed, using fallback");
           return `Here's ${title.toLowerCase()}. Stick around — this one's worth it. Follow for more.`;
         })
       : Promise.resolve(undefined),
-    env.OPENAI_API_KEY
-      ? generateGraphicViaOpenAI(title, prompt).catch((err) => {
+    openAiKey
+      ? generateGraphicViaOpenAI(workspaceId, title, prompt).catch((err) => {
           logger.warn({ err: (err as Error).message }, "[social] image generation failed, using local stub graphic");
           return localStubGraphic(title, contentType);
         })

@@ -81,7 +81,7 @@ export async function proposeAndGenerateContentPlan(
 ) {
   const listing = await getListing(workspaceId, listingId);
 
-  const raw = await generateChatCompletion([
+  const raw = await generateChatCompletion(workspaceId, [
     { role: "system", content: PLAN_SYSTEM_PROMPT },
     {
       role: "user",

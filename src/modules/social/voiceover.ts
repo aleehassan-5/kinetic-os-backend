@@ -1,25 +1,27 @@
-import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 import { saveMediaBuffer } from "@/lib/media-storage";
+import { resolveAiKey } from "@/modules/ai-providers/ai-providers.service";
 import type { VoiceoverResult } from "./social.types";
 
 const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // ElevenLabs' default "Rachel" voice
 
 /**
- * Synthesizes a voiceover for a reel/story script. Without ELEVENLABS_API_KEY
- * set, returns null so the pipeline still completes (the frontend shows the
- * script but no audio) instead of failing the whole post generation.
+ * Synthesizes a voiceover for a reel/story script. Without an ElevenLabs key
+ * configured (per-workspace or deployment-wide), returns null so the
+ * pipeline still completes (the frontend shows the script but no audio)
+ * instead of failing the whole post generation.
  */
-export async function generateVoiceover(script: string): Promise<VoiceoverResult> {
-  if (!env.ELEVENLABS_API_KEY) {
-    logger.warn("[voiceover] no ELEVENLABS_API_KEY set — skipping audio synthesis (script still generated)");
+export async function generateVoiceover(workspaceId: string, script: string): Promise<VoiceoverResult> {
+  const apiKey = await resolveAiKey(workspaceId, "ELEVENLABS");
+  if (!apiKey) {
+    logger.warn("[voiceover] no ElevenLabs key configured — skipping audio synthesis (script still generated)");
     return { voiceoverUrl: null, provider: "local-stub" };
   }
 
   const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${DEFAULT_VOICE_ID}`, {
     method: "POST",
     headers: {
-      "xi-api-key": env.ELEVENLABS_API_KEY,
+      "xi-api-key": apiKey,
       "Content-Type": "application/json",
       Accept: "audio/mpeg",
     },

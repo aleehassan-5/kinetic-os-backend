@@ -123,6 +123,9 @@ enum IntegrationType {
   GOOGLE_CALENDAR
   HUBSPOT
   GOOGLE_SHEETS
+  OPENAI
+  ANTHROPIC
+  ELEVENLABS
 }
 
 enum IntegrationStatus {

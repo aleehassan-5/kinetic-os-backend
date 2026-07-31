@@ -111,7 +111,7 @@ export async function generateCheckin(workspaceId: string): Promise<{ message: s
     .filter(Boolean)
     .join(" ");
 
-  const message = await generateChatCompletion([
+  const message = await generateChatCompletion(workspaceId, [
     { role: "system", content: CHECKIN_SYSTEM_PROMPT },
     { role: "user", content: `Here's what's actually happening in the business right now: ${factsForPrompt}` },
   ]);

@@ -21,7 +21,7 @@ export async function answerWithKnowledgeBase(workspaceId: string, history: Chat
     return { reply: "What would you like to know?", sources: [] };
   }
 
-  const queryEmbedding = await embedText(lastUserMessage.content);
+  const queryEmbedding = await embedText(workspaceId, lastUserMessage.content);
   const chunks = await retrieveRelevantChunks(workspaceId, queryEmbedding, 5);
 
   const context = chunks.length
@@ -37,7 +37,7 @@ export async function answerWithKnowledgeBase(workspaceId: string, history: Chat
     ...history.map((h) => ({ role: h.role, content: h.content }) as ChatMessage),
   ];
 
-  const reply = await generateChatCompletion(messages);
+  const reply = await generateChatCompletion(workspaceId, messages);
 
   return {
     reply,

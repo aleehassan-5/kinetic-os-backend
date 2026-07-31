@@ -27,19 +27,19 @@ export async function createDocument(workspaceId: string, input: CreateDocumentI
 
   // Fire-and-forget: ingestion runs async so the upload request returns
   // immediately (the frontend shows "Processing" via the status field).
-  ingestDocument(document.id, input.rawText).catch((err) => {
+  ingestDocument(workspaceId, document.id, input.rawText).catch((err) => {
     logger.error({ err, documentId: document.id }, "knowledge document ingestion failed");
   });
 
   return document;
 }
 
-export async function ingestDocument(documentId: string, rawText: string) {
+export async function ingestDocument(workspaceId: string, documentId: string, rawText: string) {
   await prisma.knowledgeDocument.update({ where: { id: documentId }, data: { status: "PROCESSING" } });
 
   try {
     const chunks = chunkText(rawText);
-    const embeddings = await embedBatch(chunks.map((c) => c.content));
+    const embeddings = await embedBatch(workspaceId, chunks.map((c) => c.content));
 
     await prisma.$transaction(
       chunks.map((chunk, i) => {
@@ -79,7 +79,7 @@ export async function resyncDocument(workspaceId: string, documentId: string, ra
   const doc = await prisma.knowledgeDocument.findFirst({ where: { id: documentId, workspaceId } });
   if (!doc) throw new NotFoundError("Document not found");
   await prisma.knowledgeChunk.deleteMany({ where: { documentId } });
-  await ingestDocument(documentId, rawText);
+  await ingestDocument(workspaceId, documentId, rawText);
 }
 
 export interface RetrievedChunk {

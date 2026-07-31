@@ -1,22 +1,25 @@
 import { env } from "@/config/env";
+import { resolveAiKey } from "@/modules/ai-providers/ai-providers.service";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
 }
 
-export async function generateChatCompletion(messages: ChatMessage[]): Promise<string> {
-  if (!env.OPENAI_API_KEY) {
+export async function generateChatCompletion(workspaceId: string, messages: ChatMessage[]): Promise<string> {
+  const apiKey = await resolveAiKey(workspaceId, "OPENAI");
+
+  if (!apiKey) {
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     return (
-      "[Local dev mode — no OPENAI_API_KEY set] I'd normally answer using your knowledge base here. " +
-      `You asked: "${lastUser?.content ?? ""}". Add OPENAI_API_KEY to .env to get real AI replies.`
+      "[Local dev mode — no OpenAI key configured] I'd normally answer using your knowledge base here. " +
+      `You asked: "${lastUser?.content ?? ""}". Connect an OpenAI key in Settings → AI Providers to get real AI replies.`
     );
   }
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model: env.OPENAI_CHAT_MODEL, messages, temperature: 0.4 }),
   });
 
