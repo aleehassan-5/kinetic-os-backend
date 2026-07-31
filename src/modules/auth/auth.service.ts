@@ -1,10 +1,16 @@
+import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, comparePassword, hashToken } from "@/lib/password";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "@/lib/jwt";
 import { ConflictError, UnauthorizedError, ForbiddenError } from "@/lib/errors";
-import type { LoginInput, RegisterInput } from "./auth.schema";
+import { sendMail, resetPasswordEmailTemplate } from "@/lib/mailer";
+import { env } from "@/config/env";
+import { logger } from "@/lib/logger";
+import type { ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput } from "./auth.schema";
 import type { GoogleProfile } from "@/lib/google-oauth";
 import type { Prisma } from "@prisma/client";
+
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 function slugify(name: string): string {
   const base = name
@@ -215,6 +221,54 @@ export async function updateProfile(userId: string, input: { name?: string; avat
     },
   });
   return sanitizeUser(user);
+}
+
+export async function requestPasswordReset(input: ForgotPasswordInput) {
+  const user = await prisma.user.findUnique({ where: { email: input.email } });
+
+  // Always behave the same way whether or not the account exists, so this
+  // endpoint can't be used to enumerate registered emails.
+  if (!user) {
+    logger.info({ email: input.email }, "[auth] password reset requested for unknown email");
+    return { sent: true };
+  }
+
+  const rawToken = randomBytes(32).toString("hex");
+
+  await prisma.passwordResetToken.create({
+    data: {
+      userId: user.id,
+      tokenHash: hashToken(rawToken),
+      expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+    },
+  });
+
+  const resetUrl = `${env.WEB_APP_URL}/reset-password?token=${rawToken}`;
+  const { subject, html, text } = resetPasswordEmailTemplate({ name: user.name, resetUrl });
+  await sendMail({ to: user.email, subject, html, text });
+
+  return { sent: true };
+}
+
+export async function resetPassword(input: ResetPasswordInput) {
+  const tokenHash = hashToken(input.token);
+  const stored = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+
+  if (!stored || stored.usedAt || stored.expiresAt < new Date()) {
+    throw new UnauthorizedError("This reset link is invalid or has expired");
+  }
+
+  const passwordHash = await hashPassword(input.password);
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: stored.userId }, data: { passwordHash } }),
+    prisma.passwordResetToken.update({ where: { id: stored.id }, data: { usedAt: new Date() } }),
+    // Reset ends every existing session — anyone who had the old password (or
+    // a stolen refresh token) shouldn't stay signed in past this point.
+    prisma.refreshToken.updateMany({ where: { userId: stored.userId, revokedAt: null }, data: { revokedAt: new Date() } }),
+  ]);
+
+  return { success: true };
 }
 
 function sanitizeUser<T extends { passwordHash?: string | null }>(user: T) {

@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { registerSchema, loginSchema, refreshSchema, updateProfileSchema } from "./auth.schema";
+import { registerSchema, loginSchema, refreshSchema, updateProfileSchema, forgotPasswordSchema, resetPasswordSchema } from "./auth.schema";
 import * as authService from "./auth.service";
 import { buildGoogleAuthUrl, fetchGoogleProfile, signOAuthState, verifyOAuthState } from "@/lib/google-oauth";
 import { env } from "@/config/env";
@@ -37,6 +37,19 @@ export async function updateProfileHandler(req: Request, res: Response) {
   const input = updateProfileSchema.parse(req.body);
   const user = await authService.updateProfile(req.auth!.userId, input);
   res.status(200).json(user);
+}
+
+export async function forgotPasswordHandler(req: Request, res: Response) {
+  const input = forgotPasswordSchema.parse(req.body);
+  await authService.requestPasswordReset(input);
+  // Generic response regardless of outcome — never reveals whether the email exists.
+  res.status(200).json({ message: "If an account exists for that email, a reset link has been sent." });
+}
+
+export async function resetPasswordHandler(req: Request, res: Response) {
+  const input = resetPasswordSchema.parse(req.body);
+  const result = await authService.resetPassword(input);
+  res.status(200).json(result);
 }
 
 /** Kicks off "Continue with Google" — redirects the browser to Google's consent screen. */

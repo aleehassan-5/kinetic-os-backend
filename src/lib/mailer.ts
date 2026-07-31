@@ -36,6 +36,21 @@ export async function sendMail(input: { to: string; subject: string; html: strin
   }
 }
 
+export function resetPasswordEmailTemplate(input: { name: string; resetUrl: string }) {
+  return {
+    subject: "Reset your Kinetic OS password",
+    html: `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+        <h2>Reset your password</h2>
+        <p>Hi ${input.name}, we received a request to reset your Kinetic OS password.</p>
+        <p><a href="${input.resetUrl}" style="display:inline-block;padding:10px 18px;background:#7C5CFF;color:#fff;border-radius:6px;text-decoration:none;">Reset password</a></p>
+        <p style="color:#888;font-size:12px;">This link expires in 1 hour. If you didn't request this, you can safely ignore this email — your password won't be changed.</p>
+      </div>
+    `,
+    text: `Reset your Kinetic OS password: ${input.resetUrl} (expires in 1 hour). If you didn't request this, ignore this email.`,
+  };
+}
+
 export function inviteEmailTemplate(input: { workspaceName: string; inviterName: string; role: string; signupUrl: string }) {
   return {
     subject: `You've been invited to join ${input.workspaceName} on Kinetic OS`,

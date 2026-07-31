@@ -52,9 +52,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  memberships   Membership[]
-  refreshTokens RefreshToken[]
-  notifications Notification[]
+  memberships         Membership[]
+  refreshTokens       RefreshToken[]
+  notifications       Notification[]
+  passwordResetTokens PasswordResetToken[]
 }
 
 enum MembershipRole {
@@ -93,6 +94,17 @@ model RefreshToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
   revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  usedAt    DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
