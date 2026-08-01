@@ -51,11 +51,13 @@
     "@types/nodemailer": "^6.4.16",
     "@types/pdf-parse": "^1.1.4",
     "@types/supertest": "^7.2.1",
+    "eslint": "^9.39.5",
     "pino-pretty": "^11.3.0",
     "prisma": "^5.20.0",
     "supertest": "^7.2.2",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
+    "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10"
   }
 }
