@@ -84,7 +84,7 @@ export async function startCheckout(workspaceId: string, planId: string, userEma
     // founder confirms the transfer manually and calls the admin/activate
     // endpoint below to flip the workspace to that plan.
     const message = encodeURIComponent(
-      `Hi! I'd like to subscribe to the ${plan.name} plan (${plan.priceLabel}) on Kinetic OS.`
+      `Hi! I'd like to talk about subscribing to the ${plan.name} plan on Kinetic OS.`
     );
     return {
       mode: "manual",
@@ -132,9 +132,14 @@ export async function cancelWorkspaceSubscription(workspaceId: string) {
  * paying via bank transfer / JazzCash / Easypaisa outside any automated
  * gateway. Not exposed to workspace members — gated by BILLING_ADMIN_SECRET,
  * meant to be called by the founder after confirming the transfer landed.
+ *
+ * `amountPKR` is whatever was actually agreed with that customer — pricing
+ * is negotiated per customer at this stage, not read off plans.ts. Falls
+ * back to the plan's reference price only if no amount is given.
  */
-export async function activateSubscriptionManually(workspaceId: string, planId: string) {
+export async function activateSubscriptionManually(workspaceId: string, planId: string, amountPKR?: number) {
   const plan = getPlanById(planId);
+  const agreedAmountPKR = amountPKR ?? plan.pricePKR;
   const now = new Date();
   const renewsAt = new Date(now);
   renewsAt.setDate(renewsAt.getDate() + 30);
@@ -169,7 +174,7 @@ export async function activateSubscriptionManually(workspaceId: string, planId: 
       data: {
         workspaceId,
         lemonSqueezyOrderId: manualId,
-        amountCents: plan.pricePKR * 100,
+        amountCents: agreedAmountPKR * 100,
         currency: "PKR",
         status: "PAID",
         billingReason: "Manual payment confirmed",
@@ -178,5 +183,5 @@ export async function activateSubscriptionManually(workspaceId: string, planId: 
     }),
   ]);
 
-  return { activated: true, plan: plan.id, renewsAt };
+  return { activated: true, plan: plan.id, amountPKR: agreedAmountPKR, renewsAt };
 }

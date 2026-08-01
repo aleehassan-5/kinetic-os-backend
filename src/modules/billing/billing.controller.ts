@@ -13,6 +13,9 @@ export const checkoutSchema = z.object({
 const adminActivateSchema = z.object({
   workspaceId: z.string().min(1),
   planId: z.enum(["starter", "growth", "scale"]),
+  // Whatever was actually agreed with this customer — omit to fall back to
+  // the plan's reference price in plans.ts.
+  amountPKR: z.number().positive().optional(),
 });
 
 export async function overviewHandler(req: Request, res: Response) {
@@ -60,8 +63,8 @@ export async function adminActivateHandler(req: Request, res: Response) {
     throw new UnauthorizedError("Invalid admin secret");
   }
 
-  const { workspaceId, planId } = adminActivateSchema.parse(req.body);
+  const { workspaceId, planId, amountPKR } = adminActivateSchema.parse(req.body);
   await prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId } }); // 404s cleanly if the id is wrong
-  const result = await billingService.activateSubscriptionManually(workspaceId, planId);
+  const result = await billingService.activateSubscriptionManually(workspaceId, planId, amountPKR);
   res.status(200).json(result);
 }
