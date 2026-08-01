@@ -90,6 +90,19 @@ const envSchema = z.object({
   LEMONSQUEEZY_VARIANT_STARTER: z.string().optional().default(""),
   LEMONSQUEEZY_VARIANT_GROWTH: z.string().optional().default(""),
   LEMONSQUEEZY_VARIANT_SCALE: z.string().optional().default(""),
+
+  // Billing mode: "manual" (default — WhatsApp + bank/JazzCash/Easypaisa transfer,
+  // founder marks paid) or "lemonsqueezy" (automated card checkout). Start on
+  // manual for the first handful of beachhead customers; flip to lemonsqueezy
+  // once there's real invoicing volume to justify the integration.
+  BILLING_MODE: z.enum(["manual", "lemonsqueezy"]).default("manual"),
+  BILLING_ADMIN_SECRET: z.string().optional().default(""),
+  FOUNDER_WHATSAPP_NUMBER: z.string().optional().default(""), // e.g. "923001234567" (no +, no spaces)
+  BANK_ACCOUNT_TITLE: z.string().optional().default(""),
+  BANK_ACCOUNT_NUMBER: z.string().optional().default(""),
+  BANK_NAME: z.string().optional().default(""),
+  EASYPAISA_NUMBER: z.string().optional().default(""),
+  JAZZCASH_NUMBER: z.string().optional().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);

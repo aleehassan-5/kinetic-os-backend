@@ -1,9 +1,17 @@
 import { z } from "zod";
+import { timingSafeEqual } from "crypto";
 import type { Request, Response } from "express";
 import { prisma } from "@/lib/prisma";
+import { env } from "@/config/env";
+import { UnauthorizedError, AppError } from "@/lib/errors";
 import * as billingService from "./billing.service";
 
 export const checkoutSchema = z.object({
+  planId: z.enum(["starter", "growth", "scale"]),
+});
+
+const adminActivateSchema = z.object({
+  workspaceId: z.string().min(1),
   planId: z.enum(["starter", "growth", "scale"]),
 });
 
@@ -32,4 +40,28 @@ export async function portalHandler(req: Request, res: Response) {
 export async function cancelHandler(req: Request, res: Response) {
   await billingService.cancelWorkspaceSubscription(req.auth!.workspaceId);
   res.status(204).send();
+}
+
+/**
+ * Founder-only: confirms a manual bank/JazzCash/Easypaisa transfer and
+ * activates the workspace's plan. Not tied to any workspace's membership —
+ * gated purely by BILLING_ADMIN_SECRET (constant-time compared) since the
+ * founder is acting across every customer's workspace, not as a member of
+ * any single one.
+ */
+export async function adminActivateHandler(req: Request, res: Response) {
+  if (!env.BILLING_ADMIN_SECRET) {
+    throw new AppError("BILLING_ADMIN_SECRET is not configured — set it before using manual activation", 503);
+  }
+
+  const provided = Buffer.from(req.header("x-billing-admin-secret") ?? "");
+  const expected = Buffer.from(env.BILLING_ADMIN_SECRET);
+  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
+    throw new UnauthorizedError("Invalid admin secret");
+  }
+
+  const { workspaceId, planId } = adminActivateSchema.parse(req.body);
+  await prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId } }); // 404s cleanly if the id is wrong
+  const result = await billingService.activateSubscriptionManually(workspaceId, planId);
+  res.status(200).json(result);
 }
