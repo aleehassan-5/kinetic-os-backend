@@ -4,6 +4,9 @@ const { prismaMock, answerWithKnowledgeBaseMock, sendReplyMock, createNotificati
   const mock: any = {
     conversation: { findFirst: vi.fn() },
     lead: { findUniqueOrThrow: vi.fn() },
+    // Added for scheduling-crm.service.ts's getIntegrationCredentials() — the
+    // calendar_book "not configured" tests exercise this path directly.
+    integration: { findUnique: vi.fn() },
   };
   return {
     prismaMock: mock,
