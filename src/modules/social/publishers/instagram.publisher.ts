@@ -22,18 +22,19 @@ export const instagramPublisher: SocialPublisher = {
   platform: "INSTAGRAM",
 
   async publish(input: PublishInput): Promise<PublishResult> {
-    const igBusinessAccountId = input.externalAccountId ?? env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
-    if (!env.META_PAGE_ACCESS_TOKEN || !igBusinessAccountId || !input.mediaUrl) {
+    const accessToken = input.credentials?.pageAccessToken || env.META_PAGE_ACCESS_TOKEN;
+    const igBusinessAccountId = input.externalAccountId || input.credentials?.igBusinessAccountId || env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
+    if (!accessToken || !igBusinessAccountId || !input.mediaUrl) {
       logger.warn({ post: input }, "[instagram] not configured or no media — logging instead of publishing");
-      return { published: false, error: "Instagram not connected — publish skipped" };
+      return { published: false, error: "Instagram not connected — connect it in Settings → Social Accounts" };
     }
 
     try {
       // Step 1: create a media container — video_url + media_type:REELS for
       // an actual assembled reel video, image_url for a static graphic.
       const containerBody = input.isVideo
-        ? { media_type: "REELS", video_url: input.mediaUrl, caption: input.caption, access_token: env.META_PAGE_ACCESS_TOKEN }
-        : { image_url: input.mediaUrl, caption: input.caption, access_token: env.META_PAGE_ACCESS_TOKEN };
+        ? { media_type: "REELS", video_url: input.mediaUrl, caption: input.caption, access_token: accessToken }
+        : { image_url: input.mediaUrl, caption: input.caption, access_token: accessToken };
 
       const containerRes = await fetch(
         `https://graph.facebook.com/${GRAPH_VERSION}/${igBusinessAccountId}/media`,
@@ -47,7 +48,7 @@ export const instagramPublisher: SocialPublisher = {
       const container = (await containerRes.json()) as { id: string };
 
       if (input.isVideo) {
-        await waitForContainerReady(container.id, env.META_PAGE_ACCESS_TOKEN);
+        await waitForContainerReady(container.id, accessToken);
       }
 
       // Step 2: publish the container.
@@ -56,7 +57,7 @@ export const instagramPublisher: SocialPublisher = {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ creation_id: container.id, access_token: env.META_PAGE_ACCESS_TOKEN }),
+          body: JSON.stringify({ creation_id: container.id, access_token: accessToken }),
         }
       );
       if (!publishRes.ok) throw new Error(`publish failed (${publishRes.status}): ${await publishRes.text()}`);
@@ -69,8 +70,9 @@ export const instagramPublisher: SocialPublisher = {
     }
   },
 
-  async replyToComment(accountExternalId, commentExternalId, text): Promise<PublishResult> {
-    if (!env.META_PAGE_ACCESS_TOKEN) {
+  async replyToComment(_accountExternalId, commentExternalId, text, credentials): Promise<PublishResult> {
+    const accessToken = credentials?.pageAccessToken || env.META_PAGE_ACCESS_TOKEN;
+    if (!accessToken) {
       logger.warn({ commentExternalId }, "[instagram] no credentials — logging comment reply instead of sending");
       return { published: false, error: "Instagram not connected — reply skipped" };
     }
@@ -78,7 +80,7 @@ export const instagramPublisher: SocialPublisher = {
       const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${commentExternalId}/replies`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, access_token: env.META_PAGE_ACCESS_TOKEN }),
+        body: JSON.stringify({ message: text, access_token: accessToken }),
       });
       if (!res.ok) throw new Error(`comment reply failed (${res.status}): ${await res.text()}`);
       const data = (await res.json()) as { id: string };

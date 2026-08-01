@@ -6,9 +6,10 @@ export const tiktokPublisher: SocialPublisher = {
   platform: "TIKTOK",
 
   async publish(input: PublishInput): Promise<PublishResult> {
-    if (!env.TIKTOK_ACCESS_TOKEN || !input.mediaUrl) {
+    const accessToken = input.credentials?.accessToken || env.TIKTOK_ACCESS_TOKEN;
+    if (!accessToken || !input.mediaUrl) {
       logger.warn({ post: input }, "[tiktok] not configured or no video — logging instead of publishing");
-      return { published: false, error: "TikTok not connected — publish skipped" };
+      return { published: false, error: "TikTok not connected — connect it in Settings → Social Accounts" };
     }
 
     try {
@@ -17,7 +18,7 @@ export const tiktokPublisher: SocialPublisher = {
       const res = await fetch("https://open.tiktokapis.com/v2/post/publish/video/init/", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${env.TIKTOK_ACCESS_TOKEN}`,
+          Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({

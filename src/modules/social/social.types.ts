@@ -17,6 +17,8 @@ export interface PublishInput {
   mediaUrl: string | null;
   voiceoverUrl: string | null;
   isVideo: boolean;
+  /** Workspace's own connected credentials, if any — publishers fall back to deployment env vars when undefined. */
+  credentials?: Record<string, string>;
 }
 
 export interface PublishResult {
@@ -38,5 +40,5 @@ export interface InboundComment {
 export interface SocialPublisher {
   platform: SocialPlatform;
   publish(input: PublishInput): Promise<PublishResult>;
-  replyToComment(accountExternalId: string, commentExternalId: string, text: string): Promise<PublishResult>;
+  replyToComment(accountExternalId: string, commentExternalId: string, text: string, credentials?: Record<string, string>): Promise<PublishResult>;
 }

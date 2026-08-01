@@ -26,6 +26,8 @@ import integrationsRoutes from "@/modules/settings/integrations.routes";
 import meetingsRoutes from "@/modules/meetings/meetings.routes";
 import listingsRoutes from "@/modules/listings/listings.routes";
 import aiProvidersRoutes from "@/modules/ai-providers/ai-providers.routes";
+import socialAccountsRoutes from "@/modules/social-accounts/social-accounts.routes";
+import schedulingCrmRoutes from "@/modules/scheduling-crm/scheduling-crm.routes";
 
 export const app = express();
 
@@ -73,6 +75,8 @@ app.use("/social", socialRoutes);
 app.use("/webhooks/social", socialWebhooksRoutes);
 app.use("/channel-connections", channelConnectionsRoutes);
 app.use("/ai-providers", aiProvidersRoutes);
+app.use("/social-accounts", socialAccountsRoutes);
+app.use("/scheduling-crm", schedulingCrmRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

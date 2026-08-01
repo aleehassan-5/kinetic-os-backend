@@ -1,19 +1,25 @@
-import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 import { getGoogleServiceAccountToken } from "@/lib/google-service-account";
+import { resolveGoogleSheets } from "@/modules/scheduling-crm/scheduling-crm.service";
 
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 
-/** Appends a single row to the configured spreadsheet's first sheet (tab "Sheet1" by default). */
-export async function appendRow(values: (string | number | null)[], sheetName = "Sheet1"): Promise<void> {
-  if (!env.GOOGLE_SHEETS_SPREADSHEET_ID || !env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY) {
-    logger.warn({ values }, "[google-sheets] not configured — logging instead of appending");
+/**
+ * Appends a single row to the workspace's connected spreadsheet's first
+ * sheet (tab "Sheet1" by default). Falls back to the deployment-wide
+ * GOOGLE_SHEETS_* env vars if the workspace hasn't connected its own.
+ */
+export async function appendRow(workspaceId: string, values: (string | number | null)[], sheetName = "Sheet1"): Promise<void> {
+  const resolved = await resolveGoogleSheets(workspaceId);
+  if (!resolved) {
+    logger.warn({ values }, "[google-sheets] not connected for this workspace — logging instead of appending");
     return;
   }
+  const { account, spreadsheetId } = resolved;
 
-  const accessToken = await getGoogleServiceAccountToken(SHEETS_SCOPE);
+  const accessToken = await getGoogleServiceAccountToken(SHEETS_SCOPE, account);
   const range = `${sheetName}!A1`;
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEETS_SPREADSHEET_ID}/values/${encodeURIComponent(
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
     range
   )}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
 

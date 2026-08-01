@@ -6,10 +6,11 @@ export const linkedinPublisher: SocialPublisher = {
   platform: "LINKEDIN",
 
   async publish(input: PublishInput): Promise<PublishResult> {
-    const authorUrn = input.externalAccountId ?? env.LINKEDIN_ORGANIZATION_URN;
-    if (!env.LINKEDIN_ACCESS_TOKEN || !authorUrn) {
+    const accessToken = input.credentials?.accessToken || env.LINKEDIN_ACCESS_TOKEN;
+    const authorUrn = input.externalAccountId || input.credentials?.organizationUrn || env.LINKEDIN_ORGANIZATION_URN;
+    if (!accessToken || !authorUrn) {
       logger.warn({ post: input }, "[linkedin] not configured — logging instead of publishing");
-      return { published: false, error: "LinkedIn not connected — publish skipped" };
+      return { published: false, error: "LinkedIn not connected — connect it in Settings → Social Accounts" };
     }
 
     // LinkedIn video needs a real registerUpload → PUT binary → reference-asset
@@ -26,7 +27,7 @@ export const linkedinPublisher: SocialPublisher = {
       const res = await fetch("https://api.linkedin.com/v2/ugcPosts", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${env.LINKEDIN_ACCESS_TOKEN}`,
+          Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
           "X-Restli-Protocol-Version": "2.0.0",
         },
@@ -52,8 +53,10 @@ export const linkedinPublisher: SocialPublisher = {
     }
   },
 
-  async replyToComment(_accountExternalId, commentExternalId, text): Promise<PublishResult> {
-    if (!env.LINKEDIN_ACCESS_TOKEN) {
+  async replyToComment(_accountExternalId, commentExternalId, text, credentials): Promise<PublishResult> {
+    const accessToken = credentials?.accessToken || env.LINKEDIN_ACCESS_TOKEN;
+    const actorUrn = credentials?.organizationUrn || env.LINKEDIN_ORGANIZATION_URN;
+    if (!accessToken) {
       logger.warn({ commentExternalId }, "[linkedin] no credentials — logging comment reply instead of sending");
       return { published: false, error: "LinkedIn not connected — reply skipped" };
     }
@@ -61,11 +64,11 @@ export const linkedinPublisher: SocialPublisher = {
       const res = await fetch(`https://api.linkedin.com/v2/socialActions/${commentExternalId}/comments`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${env.LINKEDIN_ACCESS_TOKEN}`,
+          Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
           "X-Restli-Protocol-Version": "2.0.0",
         },
-        body: JSON.stringify({ actor: env.LINKEDIN_ORGANIZATION_URN, message: { text } }),
+        body: JSON.stringify({ actor: actorUrn, message: { text } }),
       });
       if (!res.ok) throw new Error(`comment reply failed (${res.status}): ${await res.text()}`);
       return { published: true };

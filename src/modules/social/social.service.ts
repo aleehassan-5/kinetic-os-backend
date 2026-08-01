@@ -8,6 +8,7 @@ import { generatePostAssets } from "./content-generation";
 import { generateVoiceover } from "./voiceover";
 import { assembleReelVideo, isFfmpegAvailable } from "@/lib/video-assembly";
 import { getPublisher } from "./publishers/registry";
+import { getStoredCredentials } from "@/modules/social-accounts/social-accounts.service";
 import { enqueuePublishJob, cancelPublishJob } from "./social.queue";
 import type { InboundComment } from "./social.types";
 
@@ -150,6 +151,7 @@ export async function publishPost(workspaceId: string, postId: string) {
     mediaUrl: post.mediaUrl,
     voiceoverUrl: post.voiceoverUrl,
     isVideo: post.mediaUrl?.endsWith(".mp4") ?? false,
+    credentials: getStoredCredentials(account),
   });
 
   const updated = await prisma.socialPost.update({
@@ -281,7 +283,7 @@ export async function handleInboundComment(workspaceId: string, accountId: strin
   try {
     const { reply } = await answerWithKnowledgeBase(workspaceId, [{ role: "user", content: comment.text }]);
     const publisher = getPublisher(comment.platform);
-    const result = await publisher.replyToComment(comment.accountExternalId, comment.commentExternalId, reply);
+    const result = await publisher.replyToComment(comment.accountExternalId, comment.commentExternalId, reply, getStoredCredentials(account));
 
     return prisma.socialComment.update({
       where: { id: stored.id },

@@ -1,12 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-import { env } from "@/config/env";
 import { answerWithKnowledgeBase } from "@/modules/chat/chat.service";
 import { sendReply } from "@/modules/leads/leads.service";
 import { createNotification } from "@/modules/notifications/notifications.service";
 import { appendRow } from "@/lib/google-sheets";
-import { createSchedulingLink, isCalendlyConfigured } from "@/lib/calendly";
-import { createCalendarEvent, isGoogleCalendarConfigured } from "@/lib/google-calendar";
+import { createSchedulingLink, isCalendlyConnected } from "@/lib/calendly";
+import { createCalendarEvent, isGoogleCalendarConnected } from "@/lib/google-calendar";
+import { resolveHubspotToken, resolveGoogleSheets } from "@/modules/scheduling-crm/scheduling-crm.service";
 import type { WorkflowActionData, WorkflowExecutionContext } from "./workflow.types";
 
 export async function executeAction(action: WorkflowActionData, ctx: WorkflowExecutionContext): Promise<string> {
@@ -55,13 +55,14 @@ async function runCrmSync(action: WorkflowActionData, ctx: WorkflowExecutionCont
   }
 
   if (action.integration === "HUBSPOT") {
-    if (!env.HUBSPOT_ACCESS_TOKEN) {
-      logger.warn({ leadId: lead.id }, "[crm-sync] HubSpot not configured — logging instead of syncing");
+    const accessToken = await resolveHubspotToken(ctx.workspaceId);
+    if (!accessToken) {
+      logger.warn({ leadId: lead.id }, "[crm-sync] HubSpot not connected — logging instead of syncing");
       return "HubSpot not connected — sync skipped (would upsert contact)";
     }
     await fetch("https://api.hubapi.com/crm/v3/objects/contacts", {
       method: "POST",
-      headers: { Authorization: `Bearer ${env.HUBSPOT_ACCESS_TOKEN}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         properties: { email: lead.email ?? undefined, phone: lead.phone ?? undefined, firstname: lead.name ?? undefined },
       }),
@@ -70,11 +71,11 @@ async function runCrmSync(action: WorkflowActionData, ctx: WorkflowExecutionCont
   }
 
   if (action.integration === "GOOGLE_SHEETS") {
-    if (!env.GOOGLE_SHEETS_SPREADSHEET_ID || !env.GOOGLE_SERVICE_ACCOUNT_EMAIL) {
-      logger.warn({ leadId: lead.id }, "[crm-sync] Google Sheets not configured — logging instead of syncing");
+    if (!(await resolveGoogleSheets(ctx.workspaceId))) {
+      logger.warn({ leadId: lead.id }, "[crm-sync] Google Sheets not connected — logging instead of syncing");
       return "Google Sheets not connected — sync skipped (would append row)";
     }
-    await appendRow([
+    await appendRow(ctx.workspaceId, [
       lead.id,
       lead.name ?? "",
       lead.email ?? "",
@@ -98,10 +99,10 @@ async function runCalendarBook(action: WorkflowActionData, ctx: WorkflowExecutio
   const lead = await prisma.lead.findUniqueOrThrow({ where: { id: ctx.leadId } });
 
   if (action.provider === "CALENDLY") {
-    if (!isCalendlyConfigured()) {
+    if (!(await isCalendlyConnected(ctx.workspaceId))) {
       return "Calendly not connected — booking skipped";
     }
-    const bookingUrl = await createSchedulingLink(lead.id);
+    const bookingUrl = await createSchedulingLink(ctx.workspaceId, lead.id);
     // The Meeting row for this gets created by the /webhooks/calendly
     // `invitee.created` handler once the lead actually books a time —
     // we only know a real start/end time at that point.
@@ -115,7 +116,7 @@ async function runCalendarBook(action: WorkflowActionData, ctx: WorkflowExecutio
   }
 
   if (action.provider === "GOOGLE_CALENDAR") {
-    if (!isGoogleCalendarConfigured()) {
+    if (!(await isGoogleCalendarConnected(ctx.workspaceId))) {
       return "Google Calendar not connected — booking skipped";
     }
     // No live availability picker for a direct Calendar booking (unlike
@@ -125,7 +126,7 @@ async function runCalendarBook(action: WorkflowActionData, ctx: WorkflowExecutio
     const durationMinutes = action.durationMinutes ?? 30;
     const endTime = new Date(startTime.getTime() + durationMinutes * 60_000);
 
-    const event = await createCalendarEvent({
+    const event = await createCalendarEvent(ctx.workspaceId, {
       summary: `Call with ${lead.name ?? lead.email ?? "lead"}`,
       description: `Booked automatically by Kinetic OS for lead ${lead.id}.`,
       startTime,

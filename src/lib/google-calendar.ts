@@ -1,10 +1,10 @@
-import { env } from "@/config/env";
 import { getGoogleServiceAccountToken } from "@/lib/google-service-account";
+import { resolveGoogleCalendar } from "@/modules/scheduling-crm/scheduling-crm.service";
 
 const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
 
-export function isGoogleCalendarConfigured(): boolean {
-  return Boolean(env.GOOGLE_CALENDAR_ID && env.GOOGLE_SERVICE_ACCOUNT_EMAIL && env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY);
+export async function isGoogleCalendarConnected(workspaceId: string): Promise<boolean> {
+  return (await resolveGoogleCalendar(workspaceId)) !== null;
 }
 
 export interface CreateCalendarEventInput {
@@ -21,17 +21,21 @@ export interface CreateCalendarEventResult {
 }
 
 /**
- * Creates a real event on the configured Google Calendar. The calendar
- * (GOOGLE_CALENDAR_ID) must be shared with the service account email as an
- * editor — standard one-time setup, no per-lead OAuth needed.
+ * Creates a real event on the workspace's connected Google Calendar
+ * (Settings → Scheduling, falls back to the deployment-wide service account
+ * if the workspace hasn't connected its own). The calendar must be shared
+ * with the service account email as an editor — standard one-time setup,
+ * no per-lead OAuth needed.
  */
-export async function createCalendarEvent(input: CreateCalendarEventInput): Promise<CreateCalendarEventResult> {
-  if (!isGoogleCalendarConfigured()) {
-    throw new Error("Google Calendar not configured (GOOGLE_CALENDAR_ID / service account)");
+export async function createCalendarEvent(workspaceId: string, input: CreateCalendarEventInput): Promise<CreateCalendarEventResult> {
+  const resolved = await resolveGoogleCalendar(workspaceId);
+  if (!resolved) {
+    throw new Error("Google Calendar not connected for this workspace — connect it in Settings → Scheduling");
   }
+  const { account, calendarId } = resolved;
 
-  const accessToken = await getGoogleServiceAccountToken(CALENDAR_SCOPE);
-  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(env.GOOGLE_CALENDAR_ID)}/events?sendUpdates=all`;
+  const accessToken = await getGoogleServiceAccountToken(CALENDAR_SCOPE, account);
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=all`;
 
   const body = {
     summary: input.summary,

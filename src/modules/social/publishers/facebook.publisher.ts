@@ -8,15 +8,16 @@ export const facebookPublisher: SocialPublisher = {
   platform: "FACEBOOK",
 
   async publish(input: PublishInput): Promise<PublishResult> {
-    const pageId = input.externalAccountId ?? env.FACEBOOK_PAGE_ID;
-    if (!env.META_PAGE_ACCESS_TOKEN || !pageId) {
+    const accessToken = input.credentials?.pageAccessToken || env.META_PAGE_ACCESS_TOKEN;
+    const pageId = input.externalAccountId || input.credentials?.pageId || env.FACEBOOK_PAGE_ID;
+    if (!accessToken || !pageId) {
       logger.warn({ post: input }, "[facebook] not configured — logging instead of publishing");
-      return { published: false, error: "Facebook Page not connected — publish skipped" };
+      return { published: false, error: "Facebook Page not connected — connect it in Settings → Social Accounts" };
     }
 
     try {
       const endpoint = input.isVideo ? `${pageId}/videos` : input.mediaUrl ? `${pageId}/photos` : `${pageId}/feed`;
-      const body: Record<string, string> = { access_token: env.META_PAGE_ACCESS_TOKEN };
+      const body: Record<string, string> = { access_token: accessToken };
 
       if (input.isVideo && input.mediaUrl) {
         body.file_url = input.mediaUrl;
@@ -42,8 +43,9 @@ export const facebookPublisher: SocialPublisher = {
     }
   },
 
-  async replyToComment(_accountExternalId, commentExternalId, text): Promise<PublishResult> {
-    if (!env.META_PAGE_ACCESS_TOKEN) {
+  async replyToComment(_accountExternalId, commentExternalId, text, credentials): Promise<PublishResult> {
+    const accessToken = credentials?.pageAccessToken || env.META_PAGE_ACCESS_TOKEN;
+    if (!accessToken) {
       logger.warn({ commentExternalId }, "[facebook] no credentials — logging comment reply instead of sending");
       return { published: false, error: "Facebook not connected — reply skipped" };
     }
@@ -51,7 +53,7 @@ export const facebookPublisher: SocialPublisher = {
       const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${commentExternalId}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, access_token: env.META_PAGE_ACCESS_TOKEN }),
+        body: JSON.stringify({ message: text, access_token: accessToken }),
       });
       if (!res.ok) throw new Error(`comment reply failed (${res.status}): ${await res.text()}`);
       const data = (await res.json()) as { id: string };
