@@ -10,10 +10,9 @@ export async function generateChatCompletion(workspaceId: string, messages: Chat
   const apiKey = await resolveAiKey(workspaceId, "OPENAI");
 
   if (!apiKey) {
-    const lastUser = [...messages].reverse().find((m) => m.role === "user");
     return (
-      "[Local dev mode — no OpenAI key configured] I'd normally answer using your knowledge base here. " +
-      `You asked: "${lastUser?.content ?? ""}". Connect an OpenAI key in Settings → AI Providers to get real AI replies.`
+      "Thanks for reaching out! I'm still getting set up on this end, so I can't give you a full answer just yet — " +
+      "someone from our team will follow up with you shortly."
     );
   }
 

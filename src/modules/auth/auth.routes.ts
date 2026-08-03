@@ -1,7 +1,9 @@
-import { Router } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import rateLimit from "express-rate-limit";
+import multer from "multer";
 import { asyncHandler } from "@/middleware/error-handler";
 import { requireAuth } from "@/middleware/auth";
+import { AppError } from "@/lib/errors";
 import {
   registerHandler,
   loginHandler,
@@ -9,6 +11,7 @@ import {
   logoutHandler,
   meHandler,
   updateProfileHandler,
+  uploadAvatarHandler,
   googleRedirectHandler,
   googleCallbackHandler,
   forgotPasswordHandler,
@@ -16,6 +19,27 @@ import {
 } from "./auth.controller";
 
 const router = Router();
+
+// Small, image-only — this is a profile photo, not a document upload.
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!["image/jpeg", "image/png"].includes(file.mimetype)) {
+      cb(new Error("Only JPG or PNG images are allowed"));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
+function handleAvatarUpload(req: Request, res: Response, next: NextFunction) {
+  avatarUpload.single("file")(req, res, (err: unknown) => {
+    if (!err) return next();
+    const message = err instanceof Error && err.message === "File too large" ? "Image must be under 2MB." : "Couldn't process that image — try a JPG or PNG under 2MB.";
+    next(new AppError(message, 400));
+  });
+}
 
 // Tighter limit on credential endpoints to blunt brute-force / credential stuffing.
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false });
@@ -29,6 +53,7 @@ router.post("/refresh", authLimiter, asyncHandler(refreshHandler));
 router.post("/logout", asyncHandler(logoutHandler));
 router.get("/me", requireAuth, asyncHandler(meHandler));
 router.patch("/me", requireAuth, asyncHandler(updateProfileHandler));
+router.post("/me/avatar", requireAuth, handleAvatarUpload, asyncHandler(uploadAvatarHandler));
 router.post("/forgot-password", resetLimiter, asyncHandler(forgotPasswordHandler));
 router.post("/reset-password", resetLimiter, asyncHandler(resetPasswordHandler));
 
