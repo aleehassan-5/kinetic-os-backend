@@ -10,6 +10,7 @@ import {
   crawlUrlHandler,
   listDocumentsHandler,
   deleteDocumentHandler,
+  resyncDocumentHandler,
 } from "./knowledge.controller";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -32,6 +33,7 @@ router.get("/", asyncHandler(listDocumentsHandler));
 router.post("/upload", ingestLimiter, upload.single("file"), asyncHandler(uploadFileHandler));
 router.post("/faq", ingestLimiter, asyncHandler(createFaqHandler));
 router.post("/crawl", ingestLimiter, asyncHandler(crawlUrlHandler));
+router.post("/:documentId/resync", ingestLimiter, asyncHandler(resyncDocumentHandler));
 router.delete("/:documentId", asyncHandler(deleteDocumentHandler));
 
 export default router;

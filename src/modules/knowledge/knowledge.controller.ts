@@ -56,3 +56,8 @@ export async function deleteDocumentHandler(req: Request, res: Response) {
   await knowledgeService.deleteDocument(req.auth!.workspaceId, req.params.documentId);
   res.status(204).send();
 }
+
+export async function resyncDocumentHandler(req: Request, res: Response) {
+  await knowledgeService.resyncDocument(req.auth!.workspaceId, req.params.documentId);
+  res.status(202).json({ status: "PROCESSING" });
+}

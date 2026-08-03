@@ -292,6 +292,10 @@ model KnowledgeDocument {
   chunkCount   Int                @default(0)
   storageBytes Int                @default(0)
   error        String?
+  // The originally-extracted text, kept so "Re-sync" can actually re-run
+  // ingestion later — previously nothing was stored, so the resync button
+  // that already existed in the UI had no data to work with.
+  rawText      String?            @db.Text
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
 

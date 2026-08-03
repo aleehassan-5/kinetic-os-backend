@@ -22,6 +22,7 @@ export async function createDocument(workspaceId: string, input: CreateDocumentI
       sourceUrl: input.sourceUrl,
       status: "QUEUED",
       storageBytes: Buffer.byteLength(input.rawText, "utf8"),
+      rawText: input.rawText,
     },
   });
 
@@ -75,11 +76,29 @@ export async function deleteDocument(workspaceId: string, documentId: string) {
   await prisma.knowledgeDocument.delete({ where: { id: documentId } });
 }
 
-export async function resyncDocument(workspaceId: string, documentId: string, rawText: string) {
+/**
+ * Re-runs ingestion for an existing document — the "Re-sync" button in the
+ * UI. For URL sources this re-fetches the live page (catching content
+ * changes since the original crawl); for everything else it re-embeds the
+ * originally-extracted text stored on the document.
+ */
+export async function resyncDocument(workspaceId: string, documentId: string) {
   const doc = await prisma.knowledgeDocument.findFirst({ where: { id: documentId, workspaceId } });
   if (!doc) throw new NotFoundError("Document not found");
+
+  let text = doc.rawText;
+  if (doc.sourceType === "URL" && doc.sourceUrl) {
+    const { extractTextFromUrl } = await import("./file-extraction");
+    text = await extractTextFromUrl(doc.sourceUrl);
+    await prisma.knowledgeDocument.update({ where: { id: documentId }, data: { rawText: text } });
+  }
+
+  if (!text) {
+    throw new NotFoundError("No source content available to re-sync — this document predates re-sync support, re-upload it instead.");
+  }
+
   await prisma.knowledgeChunk.deleteMany({ where: { documentId } });
-  await ingestDocument(workspaceId, documentId, rawText);
+  await ingestDocument(workspaceId, documentId, text);
 }
 
 export interface RetrievedChunk {
