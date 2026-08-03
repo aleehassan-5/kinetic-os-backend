@@ -3,6 +3,8 @@ import { registerSchema, loginSchema, refreshSchema, updateProfileSchema, forgot
 import * as authService from "./auth.service";
 import { buildGoogleAuthUrl, fetchGoogleProfile, signOAuthState, verifyOAuthState } from "@/lib/google-oauth";
 import { env } from "@/config/env";
+import { AppError } from "@/lib/errors";
+import { saveMediaBuffer } from "@/lib/media-storage";
 
 export async function registerHandler(req: Request, res: Response) {
   const input = registerSchema.parse(req.body);
@@ -36,6 +38,16 @@ export async function meHandler(req: Request, res: Response) {
 export async function updateProfileHandler(req: Request, res: Response) {
   const input = updateProfileSchema.parse(req.body);
   const user = await authService.updateProfile(req.auth!.userId, input);
+  res.status(200).json(user);
+}
+
+export async function uploadAvatarHandler(req: Request, res: Response) {
+  const file = req.file;
+  if (!file) throw new AppError("No image file was uploaded.", 400);
+
+  const extension = file.mimetype === "image/png" ? "png" : "jpg";
+  const avatarUrl = await saveMediaBuffer(file.buffer, extension);
+  const user = await authService.updateProfile(req.auth!.userId, { avatarUrl });
   res.status(200).json(user);
 }
 
