@@ -87,6 +87,9 @@ export async function googleCallbackHandler(req: Request, res: Response) {
   try {
     const profile = await fetchGoogleProfile(code);
     const result = await authService.loginWithGoogle(profile);
+    if (result.pending) {
+      return res.redirect(`${env.WEB_APP_URL}/signup/pending`);
+    }
     const params = new URLSearchParams({ access_token: result.accessToken, refresh_token: result.refreshToken });
     res.redirect(`${env.WEB_APP_URL}/auth/callback?${params.toString()}`);
   } catch {

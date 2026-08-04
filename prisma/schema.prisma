@@ -10,11 +10,42 @@ datasource db {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// Core: workspaces, users, membership
+// Core: accounts (tenants), workspaces, users, membership
 // ────────────────────────────────────────────────────────────────────────
+
+enum AccountStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  SUSPENDED
+}
+
+/**
+ * The business/tenant boundary. One Account = one client business = one
+ * Workspace once approved. Every new signup creates an Account in PENDING
+ * status with no Workspace yet — a super_admin must approve it (which
+ * creates the Workspace) before its client_admin can ever log in.
+ */
+model Account {
+  id              String        @id @default(cuid())
+  businessName    String
+  ownerEmail      String
+  niche           String?
+  phone           String?
+  status          AccountStatus @default(PENDING)
+  createdAt       DateTime      @default(now())
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectionReason String?
+
+  approvedBy User?      @relation("AccountApprovals", fields: [approvedById], references: [id])
+  users      User[]
+  workspace  Workspace?
+}
 
 model Workspace {
   id        String   @id @default(cuid())
+  accountId String   @unique
   name      String
   slug      String   @unique
   timezone  String   @default("Asia/Karachi")
@@ -26,6 +57,7 @@ model Workspace {
   planId               String   @default("starter")
   lemonSqueezyCustomerId String?
 
+  account       Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   memberships   Membership[]
   leads         Lead[]
   conversations Conversation[]
@@ -52,6 +84,13 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Null for the platform's super_admin(s) — every other user belongs to
+  // exactly one Account (their business), set at signup and never moved.
+  accountId    String?
+  isSuperAdmin Boolean  @default(false)
+
+  account             Account?              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  approvedAccounts    Account[]             @relation("AccountApprovals")
   memberships         Membership[]
   refreshTokens       RefreshToken[]
   notifications       Notification[]

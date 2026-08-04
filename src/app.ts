@@ -28,6 +28,7 @@ import listingsRoutes from "@/modules/listings/listings.routes";
 import aiProvidersRoutes from "@/modules/ai-providers/ai-providers.routes";
 import socialAccountsRoutes from "@/modules/social-accounts/social-accounts.routes";
 import schedulingCrmRoutes from "@/modules/scheduling-crm/scheduling-crm.routes";
+import adminRoutes from "@/modules/admin/admin.routes";
 
 export const app = express();
 
@@ -77,6 +78,7 @@ app.use("/channel-connections", channelConnectionsRoutes);
 app.use("/ai-providers", aiProvidersRoutes);
 app.use("/social-accounts", socialAccountsRoutes);
 app.use("/scheduling-crm", schedulingCrmRoutes);
+app.use("/admin", adminRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

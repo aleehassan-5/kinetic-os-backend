@@ -4,22 +4,69 @@ import { hashPassword } from "@/lib/password";
 async function main() {
   const passwordHash = await hashPassword("password123");
 
+  // ── Platform super_admin — the only way one ever gets created. Not
+  // reachable through public signup, on purpose. ──────────────────────────
+  const superAdmin = await prisma.user.upsert({
+    where: { email: "super@kineticos.app" },
+    update: { isSuperAdmin: true },
+    create: { email: "super@kineticos.app", name: "Platform Admin", passwordHash, isSuperAdmin: true },
+  });
+
+  // ── One approved demo client account + workspace, so the rest of the app
+  // (leads, workflows, content, etc.) still has something real to render. ──
+  const account = await prisma.account.upsert({
+    where: { id: "seed-account-moiz" },
+    update: {},
+    create: {
+      id: "seed-account-moiz",
+      businessName: "Moiz Real Estate",
+      ownerEmail: "admin@kineticos.app",
+      niche: "real_estate",
+      phone: "+923001234567",
+      status: "ACTIVE",
+      approvedById: superAdmin.id,
+      approvedAt: new Date(),
+    },
+  });
+
   const workspace = await prisma.workspace.upsert({
     where: { slug: "moiz-real-estate" },
     update: {},
-    create: { name: "Moiz Real Estate", slug: "moiz-real-estate", industry: "real_estate" },
+    create: { accountId: account.id, name: "Moiz Real Estate", slug: "moiz-real-estate", industry: "real_estate" },
   });
 
   const user = await prisma.user.upsert({
     where: { email: "admin@kineticos.app" },
-    update: {},
-    create: { email: "admin@kineticos.app", name: "Moiz", passwordHash },
+    update: { accountId: account.id },
+    create: { email: "admin@kineticos.app", name: "Moiz", passwordHash, accountId: account.id },
   });
 
   await prisma.membership.upsert({
     where: { userId_workspaceId: { userId: user.id, workspaceId: workspace.id } },
     update: {},
     create: { userId: user.id, workspaceId: workspace.id, role: "OWNER", status: "ACTIVE", joinedAt: new Date() },
+  });
+
+  // ── A second, still-PENDING account so the admin approval panel has
+  // something real to show without any manual signup first. ──────────────
+  await prisma.account.upsert({
+    where: { id: "seed-account-pending-clinic" },
+    update: {},
+    create: {
+      id: "seed-account-pending-clinic",
+      businessName: "Al-Shifa Family Clinic",
+      ownerEmail: "clinic-owner@example.com",
+      niche: "clinic",
+      phone: "+923009876543",
+      status: "PENDING",
+      users: {
+        create: {
+          email: "clinic-owner@example.com",
+          name: "Dr. Ayesha Malik",
+          passwordHash: await hashPassword("password123"),
+        },
+      },
+    },
   });
 
   for (const type of ["WHATSAPP", "TELEGRAM", "INSTAGRAM", "MESSENGER", "EMAIL", "CALENDLY", "GOOGLE_CALENDAR", "HUBSPOT", "GOOGLE_SHEETS"] as const) {
@@ -102,7 +149,11 @@ async function main() {
     },
   });
 
-  console.log("✅ Seeded:", { workspace: workspace.slug, user: user.email, password: "password123" });
+  console.log("✅ Seeded:", {
+    superAdmin: { email: superAdmin.email, password: "password123" },
+    activeClient: { workspace: workspace.slug, user: user.email, password: "password123" },
+    pendingClient: { businessName: "Al-Shifa Family Clinic", user: "clinic-owner@example.com", password: "password123" },
+  });
 }
 
 main()

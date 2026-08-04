@@ -4,7 +4,9 @@ export const registerSchema = z.object({
   name: z.string().min(2).max(80),
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  workspaceName: z.string().min(2).max(80),
+  businessName: z.string().min(2).max(120),
+  niche: z.string().max(80).optional(),
+  phone: z.string().max(30).optional(),
 });
 
 export const loginSchema = z.object({

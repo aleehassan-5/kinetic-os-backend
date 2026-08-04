@@ -8,21 +8,11 @@ import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 import type { ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput } from "./auth.schema";
 import type { GoogleProfile } from "@/lib/google-oauth";
-import type { Prisma } from "@prisma/client";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
-function slugify(name: string): string {
-  const base = name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-  return `${base}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-async function issueTokenPair(userId: string, workspaceId: string, role: string) {
-  const accessToken = signAccessToken({ userId, workspaceId, role });
+async function issueTokenPair(userId: string, workspaceId: string, role: string, isSuperAdmin = false) {
+  const accessToken = signAccessToken({ userId, workspaceId, role, isSuperAdmin });
   const refreshToken = signRefreshToken(userId);
 
   await prisma.refreshToken.create({
@@ -37,57 +27,42 @@ async function issueTokenPair(userId: string, workspaceId: string, role: string)
 }
 
 export async function register(input: RegisterInput) {
-  // This is deployed per-client as a single-tenant instance — the first
-  // person to sign up owns it, and the door closes after that. New team
-  // members join via invite (POST /team/invite) instead, not open signup.
-  const existingWorkspaceCount = await prisma.workspace.count();
-  if (existingWorkspaceCount > 0) {
-    throw new ForbiddenError("Signups are closed — this instance is already set up for a business. Ask your admin for a team invite instead.");
-  }
-
   const existing = await prisma.user.findUnique({ where: { email: input.email } });
   if (existing) throw new ConflictError("An account with this email already exists");
 
   const passwordHash = await hashPassword(input.password);
 
-  const { user, membership } = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    const workspace = await tx.workspace.create({
-      data: { name: input.workspaceName, slug: slugify(input.workspaceName) },
-    });
-
-    const user = await tx.user.create({
-      data: { name: input.name, email: input.email, passwordHash },
-    });
-
-    const membership = await tx.membership.create({
-      data: {
-        userId: user.id,
-        workspaceId: workspace.id,
-        role: "OWNER",
-        status: "ACTIVE",
-        joinedAt: new Date(),
+  // No workspace, no membership, no tokens yet — those only come into
+  // existence once a super_admin approves this account. The client_admin
+  // exists as a user from the start so the approval step can find and
+  // attach them to their workspace's OWNER membership.
+  const account = await prisma.account.create({
+    data: {
+      businessName: input.businessName,
+      ownerEmail: input.email,
+      niche: input.niche,
+      phone: input.phone,
+      status: "PENDING",
+      users: {
+        create: { name: input.name, email: input.email, passwordHash },
       },
-    });
-
-    // Seed default (disconnected) integrations so the Settings/Integrations
-    // page has real rows to render against from day one.
-    await tx.integration.createMany({
-      data: (
-        ["WHATSAPP", "TELEGRAM", "INSTAGRAM", "MESSENGER", "EMAIL", "CALENDLY", "GOOGLE_CALENDAR", "HUBSPOT", "GOOGLE_SHEETS"] as const
-      ).map((type) => ({ workspaceId: workspace.id, type, status: "NOT_CONNECTED" as const })),
-    });
-
-    return { user, membership };
+    },
   });
 
-  const tokens = await issueTokenPair(user.id, membership.workspaceId, membership.role);
-  return { user: sanitizeUser(user), ...tokens };
+  return {
+    status: "pending" as const,
+    message: "Thanks! Your account is under review — we'll email you once it's approved.",
+    accountId: account.id,
+  };
 }
 
 export async function login(input: LoginInput) {
   const user = await prisma.user.findUnique({
     where: { email: input.email },
-    include: { memberships: { where: { status: "ACTIVE" }, orderBy: { joinedAt: "asc" }, take: 1 } },
+    include: {
+      account: true,
+      memberships: { where: { status: "ACTIVE" }, orderBy: { joinedAt: "asc" }, take: 1 },
+    },
   });
   if (!user) throw new UnauthorizedError("Invalid email or password");
   if (!user.passwordHash) {
@@ -96,6 +71,29 @@ export async function login(input: LoginInput) {
 
   const valid = await comparePassword(input.password, user.passwordHash);
   if (!valid) throw new UnauthorizedError("Invalid email or password");
+
+  // Credentials are confirmed correct at this point — from here on it's
+  // safe to give a specific, honest reason for why login is blocked,
+  // since we're no longer at risk of confirming account existence to
+  // someone who doesn't already have the right password.
+  if (user.isSuperAdmin) {
+    const tokens = await issueTokenPair(user.id, "", "SUPER_ADMIN", true);
+    return { user: sanitizeUser(user), ...tokens };
+  }
+
+  if (!user.account || user.account.status === "PENDING") {
+    throw new ForbiddenError("Your account is still awaiting approval. We'll email you once it's reviewed.");
+  }
+  if (user.account.status === "REJECTED") {
+    throw new ForbiddenError(
+      user.account.rejectionReason
+        ? `Your account application wasn't approved: ${user.account.rejectionReason}`
+        : "Your account application wasn't approved."
+    );
+  }
+  if (user.account.status === "SUSPENDED") {
+    throw new ForbiddenError("Your account has been suspended. Contact support for help.");
+  }
 
   const membership = user.memberships[0];
   if (!membership) throw new UnauthorizedError("This account has no active workspace");
@@ -120,14 +118,26 @@ export async function refresh(refreshTokenRaw: string) {
     throw new UnauthorizedError("Refresh token is no longer valid");
   }
 
+  const user = await prisma.user.findUnique({ where: { id: payload.userId }, include: { account: true } });
+  if (!user) throw new UnauthorizedError("Account no longer exists");
+
+  // Rotate: revoke the used token, issue a new pair.
+  await prisma.refreshToken.update({ where: { id: stored.id }, data: { revokedAt: new Date() } });
+
+  if (user.isSuperAdmin) {
+    return issueTokenPair(user.id, "", "SUPER_ADMIN", true);
+  }
+
+  if (!user.account || user.account.status !== "ACTIVE") {
+    throw new ForbiddenError("Your account no longer has access.");
+  }
+
   const membership = await prisma.membership.findFirst({
     where: { userId: payload.userId, status: "ACTIVE" },
     orderBy: { joinedAt: "asc" },
   });
   if (!membership) throw new UnauthorizedError("No active workspace for this user");
 
-  // Rotate: revoke the used token, issue a new pair.
-  await prisma.refreshToken.update({ where: { id: stored.id }, data: { revokedAt: new Date() } });
   return issueTokenPair(payload.userId, membership.workspaceId, membership.role);
 }
 
@@ -135,7 +145,7 @@ export async function loginWithGoogle(profile: GoogleProfile) {
   // 1) Already linked to this Google account — sign them in directly.
   let user = await prisma.user.findUnique({
     where: { googleId: profile.googleId },
-    include: { memberships: { where: { status: "ACTIVE" }, orderBy: { joinedAt: "asc" }, take: 1 } },
+    include: { account: true, memberships: { where: { status: "ACTIVE" }, orderBy: { joinedAt: "asc" }, take: 1 } },
   });
 
   // 2) An email/password account with the same email exists — link Google to it
@@ -143,51 +153,49 @@ export async function loginWithGoogle(profile: GoogleProfile) {
   if (!user) {
     const existingByEmail = await prisma.user.findUnique({
       where: { email: profile.email },
-      include: { memberships: { where: { status: "ACTIVE" }, orderBy: { joinedAt: "asc" }, take: 1 } },
+      include: { account: true, memberships: { where: { status: "ACTIVE" }, orderBy: { joinedAt: "asc" }, take: 1 } },
     });
     if (existingByEmail) {
       user = await prisma.user.update({
         where: { id: existingByEmail.id },
         data: { googleId: profile.googleId, avatarUrl: existingByEmail.avatarUrl ?? profile.avatarUrl },
-        include: { memberships: { where: { status: "ACTIVE" }, orderBy: { joinedAt: "asc" }, take: 1 } },
+        include: { account: true, memberships: { where: { status: "ACTIVE" }, orderBy: { joinedAt: "asc" }, take: 1 } },
       });
     }
   }
 
-  // 3) Brand new person — create their workspace the same way register() does.
-  //    Same single-tenant lock as register(): only the first signup gets to
-  //    create a workspace this way. Existing members (paths 1/2 above) keep
-  //    working normally regardless — this only blocks new outsiders.
+  // 3) Brand new person — same as email signup, this creates a PENDING
+  //    Account with no workspace yet. Google sign-in doesn't collect a
+  //    business name, so we use a placeholder the person can rename once
+  //    approved; the approval gate applies here exactly like it does for
+  //    email/password signups — there's no bypass via Google.
   if (!user) {
-    const existingWorkspaceCount = await prisma.workspace.count();
-    if (existingWorkspaceCount > 0) {
-      throw new ForbiddenError("Signups are closed — this instance is already set up for a business. Ask your admin for a team invite instead.");
-    }
-
-    const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const workspaceName = `${profile.name}'s Workspace`;
-      const workspace = await tx.workspace.create({
-        data: { name: workspaceName, slug: slugify(workspaceName) },
-      });
-
-      const newUser = await tx.user.create({
-        data: { name: profile.name, email: profile.email, googleId: profile.googleId, avatarUrl: profile.avatarUrl },
-      });
-
-      const membership = await tx.membership.create({
-        data: { userId: newUser.id, workspaceId: workspace.id, role: "OWNER", status: "ACTIVE", joinedAt: new Date() },
-      });
-
-      await tx.integration.createMany({
-        data: (
-          ["WHATSAPP", "TELEGRAM", "INSTAGRAM", "MESSENGER", "EMAIL", "CALENDLY", "GOOGLE_CALENDAR", "HUBSPOT", "GOOGLE_SHEETS"] as const
-        ).map((type) => ({ workspaceId: workspace.id, type, status: "NOT_CONNECTED" as const })),
-      });
-
-      return { newUser, membership };
+    await prisma.account.create({
+      data: {
+        businessName: `${profile.name}'s Business`,
+        ownerEmail: profile.email,
+        status: "PENDING",
+        users: {
+          create: { name: profile.name, email: profile.email, googleId: profile.googleId, avatarUrl: profile.avatarUrl },
+        },
+      },
     });
+    return { pending: true as const };
+  }
 
-    user = { ...created.newUser, memberships: [created.membership] };
+  if (user.isSuperAdmin) {
+    const tokens = await issueTokenPair(user.id, "", "SUPER_ADMIN", true);
+    return { pending: false as const, user: sanitizeUser(user), ...tokens };
+  }
+
+  if (!user.account || user.account.status === "PENDING") {
+    return { pending: true as const };
+  }
+  if (user.account.status === "REJECTED") {
+    throw new ForbiddenError("Your account application wasn't approved.");
+  }
+  if (user.account.status === "SUSPENDED") {
+    throw new ForbiddenError("Your account has been suspended. Contact support for help.");
   }
 
   const membership = user.memberships[0];
@@ -196,7 +204,7 @@ export async function loginWithGoogle(profile: GoogleProfile) {
   await prisma.membership.update({ where: { id: membership.id }, data: { lastActiveAt: new Date() } });
 
   const tokens = await issueTokenPair(user.id, membership.workspaceId, membership.role);
-  return { user: sanitizeUser(user), ...tokens };
+  return { pending: false as const, user: sanitizeUser(user), ...tokens };
 }
 
 export async function logout(refreshTokenRaw: string) {
@@ -205,11 +213,17 @@ export async function logout(refreshTokenRaw: string) {
 }
 
 export async function me(userId: string, workspaceId: string) {
-  const [user, membership] = await Promise.all([
-    prisma.user.findUniqueOrThrow({ where: { id: userId } }),
-    prisma.membership.findUniqueOrThrow({ where: { userId_workspaceId: { userId, workspaceId } }, include: { workspace: true } }),
-  ]);
-  return { user: sanitizeUser(user), workspace: membership.workspace, role: membership.role };
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+
+  if (user.isSuperAdmin) {
+    return { user: sanitizeUser(user), workspace: null, role: "SUPER_ADMIN" as const, isSuperAdmin: true };
+  }
+
+  const membership = await prisma.membership.findUniqueOrThrow({
+    where: { userId_workspaceId: { userId, workspaceId } },
+    include: { workspace: true },
+  });
+  return { user: sanitizeUser(user), workspace: membership.workspace, role: membership.role, isSuperAdmin: false };
 }
 
 export async function updateProfile(userId: string, input: { name?: string; avatarUrl?: string | null }) {

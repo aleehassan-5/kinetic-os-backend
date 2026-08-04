@@ -3,8 +3,10 @@ import { env } from "@/config/env";
 
 export interface AccessTokenPayload {
   userId: string;
+  /** Empty string for a super_admin — they aren't scoped to any workspace. */
   workspaceId: string;
   role: string;
+  isSuperAdmin: boolean;
 }
 
 export function signAccessToken(payload: AccessTokenPayload): string {
