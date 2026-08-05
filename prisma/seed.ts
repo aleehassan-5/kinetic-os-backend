@@ -47,28 +47,6 @@ async function main() {
     create: { userId: user.id, workspaceId: workspace.id, role: "OWNER", status: "ACTIVE", joinedAt: new Date() },
   });
 
-  // ── A second, still-PENDING account so the admin approval panel has
-  // something real to show without any manual signup first. ──────────────
-  await prisma.account.upsert({
-    where: { id: "seed-account-pending-clinic" },
-    update: {},
-    create: {
-      id: "seed-account-pending-clinic",
-      businessName: "Al-Shifa Family Clinic",
-      ownerEmail: "clinic-owner@example.com",
-      niche: "clinic",
-      phone: "+923009876543",
-      status: "PENDING",
-      users: {
-        create: {
-          email: "clinic-owner@example.com",
-          name: "Dr. Ayesha Malik",
-          passwordHash: await hashPassword("password123"),
-        },
-      },
-    },
-  });
-
   for (const type of ["WHATSAPP", "TELEGRAM", "INSTAGRAM", "MESSENGER", "EMAIL", "CALENDLY", "GOOGLE_CALENDAR", "HUBSPOT", "GOOGLE_SHEETS"] as const) {
     await prisma.integration.upsert({
       where: { workspaceId_type: { workspaceId: workspace.id, type } },
@@ -152,7 +130,6 @@ async function main() {
   console.log("✅ Seeded:", {
     superAdmin: { email: superAdmin.email, password: "password123" },
     activeClient: { workspace: workspace.slug, user: user.email, password: "password123" },
-    pendingClient: { businessName: "Al-Shifa Family Clinic", user: "clinic-owner@example.com", password: "password123" },
   });
 }
 
