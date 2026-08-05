@@ -10,6 +10,7 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { subscribeWorkflowsToEvents } from "@/modules/workflows/workflow.service";
 import { installCrashSafetyNet } from "@/lib/process-safety-net";
+import { ensureSuperAdmin } from "@/lib/ensure-super-admin";
 
 installCrashSafetyNet("api-server");
 
@@ -68,6 +69,8 @@ async function main() {
 
   await prisma.$connect();
   logger.info("Database connected");
+
+  await ensureSuperAdmin();
 
   subscribeWorkflowsToEvents();
 
