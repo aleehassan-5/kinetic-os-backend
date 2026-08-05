@@ -7,13 +7,23 @@ import { logger } from "@/lib/logger";
  * manually run `npm run seed` (e.g. via Render Shell) after a deploy.
  * Runs once at server boot — cheap upsert, safe to run on every restart.
  *
- * Email/password come from env vars so they aren't hardcoded in the repo;
- * falls back to a fixed default only if the env vars aren't set, purely so
- * local/dev setups still work out of the box.
+ * SECURITY: the real password must come from the SUPER_ADMIN_PASSWORD env
+ * var (set it in Render → Environment, never in code). In production, if
+ * that env var isn't set, we skip auto-provisioning entirely rather than
+ * falling back to a guessable default — this repo is public, so anything
+ * hardcoded here is effectively a public password.
  */
 export async function ensureSuperAdmin() {
   const email = process.env.SUPER_ADMIN_EMAIL || "super@kineticos.app";
-  const password = process.env.SUPER_ADMIN_PASSWORD || "ALLAH.pk87";
+  const isProduction = process.env.NODE_ENV === "production";
+  const password = process.env.SUPER_ADMIN_PASSWORD || (isProduction ? undefined : "password123");
+
+  if (!password) {
+    logger.warn(
+      "SUPER_ADMIN_PASSWORD not set — skipping super admin auto-provision. Set it in your environment and redeploy."
+    );
+    return;
+  }
 
   const passwordHash = await hashPassword(password);
 

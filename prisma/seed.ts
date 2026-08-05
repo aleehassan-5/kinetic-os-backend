@@ -3,9 +3,10 @@ import { hashPassword } from "@/lib/password";
 
 async function main() {
   const passwordHash = await hashPassword("password123");
-  // Super admin gets its own dedicated password (not the shared demo password
-  // above) so it isn't guessable from reading this public repo's history.
-  const superAdminPasswordHash = await hashPassword("ALLAH.pk87");
+  // SECURITY: this repo is public — never hardcode the real admin password
+  // here. Set SUPER_ADMIN_PASSWORD in your environment before seeding
+  // production; falls back to the shared demo password for local dev only.
+  const superAdminPasswordHash = await hashPassword(process.env.SUPER_ADMIN_PASSWORD || "password123");
 
   // ── Platform super_admin — the only way one ever gets created. Not
   // reachable through public signup, on purpose. ──────────────────────────
