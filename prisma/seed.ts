@@ -3,13 +3,21 @@ import { hashPassword } from "@/lib/password";
 
 async function main() {
   const passwordHash = await hashPassword("password123");
+  // Super admin gets its own dedicated password (not the shared demo password
+  // above) so it isn't guessable from reading this public repo's history.
+  const superAdminPasswordHash = await hashPassword("ALLAH.pk87");
 
   // ── Platform super_admin — the only way one ever gets created. Not
   // reachable through public signup, on purpose. ──────────────────────────
   const superAdmin = await prisma.user.upsert({
     where: { email: "super@kineticos.app" },
-    update: { isSuperAdmin: true },
-    create: { email: "super@kineticos.app", name: "Platform Admin", passwordHash, isSuperAdmin: true },
+    update: { isSuperAdmin: true, passwordHash: superAdminPasswordHash },
+    create: {
+      email: "super@kineticos.app",
+      name: "Platform Admin",
+      passwordHash: superAdminPasswordHash,
+      isSuperAdmin: true,
+    },
   });
 
   // ── One approved demo client account + workspace, so the rest of the app
