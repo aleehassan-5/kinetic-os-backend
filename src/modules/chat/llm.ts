@@ -16,7 +16,7 @@ export async function generateChatCompletion(workspaceId: string, messages: Chat
     );
   }
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await fetch(`${env.OPENAI_BASE_URL}/v1/chat/completions`, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model: env.OPENAI_CHAT_MODEL, messages, temperature: 0.4 }),

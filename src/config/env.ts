@@ -20,6 +20,10 @@ const envSchema = z.object({
   CREDENTIALS_ENCRYPTION_KEY: z.string().optional().default(""),
 
   OPENAI_API_KEY: z.string().optional().default(""),
+  // Lets you point at any free OpenAI-compatible provider (e.g. Groq:
+  // https://api.groq.com/openai/v1) instead of paying OpenAI — same request
+  // shape, just a different base URL + API key + model name.
+  OPENAI_BASE_URL: z.string().default("https://api.openai.com"),
   OPENAI_CHAT_MODEL: z.string().default("gpt-4o-mini"),
   OPENAI_EMBEDDING_MODEL: z.string().default("text-embedding-3-small"),
   OPENAI_IMAGE_MODEL: z.string().default("gpt-image-1"),
