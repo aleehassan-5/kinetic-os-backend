@@ -20,12 +20,10 @@ enum AccountStatus {
   SUSPENDED
 }
 
-/**
- * The business/tenant boundary. One Account = one client business = one
- * Workspace once approved. Every new signup creates an Account in PENDING
- * status with no Workspace yet — a super_admin must approve it (which
- * creates the Workspace) before its client_admin can ever log in.
- */
+// The business/tenant boundary. One Account = one client business = one
+// Workspace once approved. Every new signup creates an Account in PENDING
+// status with no Workspace yet — a super_admin must approve it (which
+// creates the Workspace) before its client_admin can ever log in.
 model Account {
   id              String        @id @default(cuid())
   businessName    String
