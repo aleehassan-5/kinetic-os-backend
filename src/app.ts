@@ -32,6 +32,12 @@ import adminRoutes from "@/modules/admin/admin.routes";
 
 export const app = express();
 
+// Render (and most PaaS hosts) sit behind a reverse proxy — without this,
+// express-rate-limit can't trust the X-Forwarded-For header to identify
+// real client IPs, and logs a ValidationError on every rate-limited request.
+// "1" trusts exactly one hop (Render's own proxy), not an arbitrary chain.
+app.set("trust proxy", 1);
+
 app.use(helmet());
 app.use(cors({ origin: env.WEB_APP_URL, credentials: true }));
 app.use(morgan(env.NODE_ENV === "development" ? "dev" : "combined"));
