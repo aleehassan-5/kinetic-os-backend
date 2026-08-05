@@ -6,7 +6,7 @@ import { ConflictError, UnauthorizedError, ForbiddenError } from "@/lib/errors";
 import { sendMail, resetPasswordEmailTemplate } from "@/lib/mailer";
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
-import type { ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput } from "./auth.schema";
+import type { ChangePasswordInput, ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput } from "./auth.schema";
 import type { GoogleProfile } from "@/lib/google-oauth";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -235,6 +235,40 @@ export async function updateProfile(userId: string, input: { name?: string; avat
     },
   });
   return sanitizeUser(user);
+}
+
+export async function changePassword(userId: string, input: ChangePasswordInput) {
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    include: { memberships: { where: { status: "ACTIVE" }, orderBy: { joinedAt: "asc" }, take: 1 } },
+  });
+
+  if (!user.passwordHash) {
+    throw new UnauthorizedError("This account uses Google sign-in and has no password to change.");
+  }
+
+  const valid = await comparePassword(input.currentPassword, user.passwordHash);
+  if (!valid) throw new UnauthorizedError("Current password is incorrect");
+
+  const newPasswordHash = await hashPassword(input.newPassword);
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { passwordHash: newPasswordHash } }),
+    // Same as a password reset — every other session this user had open gets
+    // signed out, since it was authenticated with the old password. We issue
+    // this session a fresh token pair right below so changing your own
+    // password doesn't also log *you* out.
+    prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } }),
+  ]);
+
+  if (user.isSuperAdmin) {
+    return { success: true as const, ...(await issueTokenPair(userId, "", "SUPER_ADMIN", true)) };
+  }
+
+  const membership = user.memberships[0];
+  if (!membership) return { success: true as const }; // no workspace to re-scope a token to (shouldn't normally happen)
+
+  return { success: true as const, ...(await issueTokenPair(userId, membership.workspaceId, membership.role)) };
 }
 
 export async function requestPasswordReset(input: ForgotPasswordInput) {

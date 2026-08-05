@@ -11,6 +11,7 @@ import {
   logoutHandler,
   meHandler,
   updateProfileHandler,
+  changePasswordHandler,
   uploadAvatarHandler,
   googleRedirectHandler,
   googleCallbackHandler,
@@ -54,6 +55,7 @@ router.post("/logout", asyncHandler(logoutHandler));
 router.get("/me", requireAuth, asyncHandler(meHandler));
 router.patch("/me", requireAuth, asyncHandler(updateProfileHandler));
 router.post("/me/avatar", requireAuth, handleAvatarUpload, asyncHandler(uploadAvatarHandler));
+router.post("/change-password", requireAuth, resetLimiter, asyncHandler(changePasswordHandler));
 router.post("/forgot-password", resetLimiter, asyncHandler(forgotPasswordHandler));
 router.post("/reset-password", resetLimiter, asyncHandler(resetPasswordHandler));
 

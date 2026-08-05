@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { registerSchema, loginSchema, refreshSchema, updateProfileSchema, forgotPasswordSchema, resetPasswordSchema } from "./auth.schema";
+import { registerSchema, loginSchema, refreshSchema, updateProfileSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema } from "./auth.schema";
 import * as authService from "./auth.service";
 import { buildGoogleAuthUrl, fetchGoogleProfile, signOAuthState, verifyOAuthState } from "@/lib/google-oauth";
 import { env } from "@/config/env";
@@ -49,6 +49,12 @@ export async function uploadAvatarHandler(req: Request, res: Response) {
   const avatarUrl = await saveMediaBuffer(file.buffer, extension);
   const user = await authService.updateProfile(req.auth!.userId, { avatarUrl });
   res.status(200).json(user);
+}
+
+export async function changePasswordHandler(req: Request, res: Response) {
+  const input = changePasswordSchema.parse(req.body);
+  const result = await authService.changePassword(req.auth!.userId, input);
+  res.status(200).json(result);
 }
 
 export async function forgotPasswordHandler(req: Request, res: Response) {
