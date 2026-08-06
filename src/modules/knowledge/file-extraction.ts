@@ -2,7 +2,15 @@ import { AppError } from "@/lib/errors";
 
 export async function extractTextFromFile(buffer: Buffer, mimetype: string, filename: string): Promise<string> {
   if (mimetype === "application/pdf" || filename.endsWith(".pdf")) {
-    const pdfParse = (await import("pdf-parse")).default;
+    // Import the library's internal implementation directly rather than its
+    // package entry point. pdf-parse's index.js has a long-standing bug: it
+    // checks `!module.parent` to decide whether it's being run "standalone"
+    // for its own internal debug/testing, and under `tsx` (and some other
+    // ESM-aware loaders) that check is true even when we're requiring it
+    // normally — so it tries to read a test fixture that doesn't exist in
+    // production and throws, failing every single PDF upload. Importing
+    // lib/pdf-parse.js skips that debug branch entirely.
+    const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
     const result = await pdfParse(buffer);
     return result.text;
   }
