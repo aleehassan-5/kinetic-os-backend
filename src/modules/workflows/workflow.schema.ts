@@ -4,6 +4,11 @@ const nodeSchema = z.object({
   id: z.string(),
   type: z.enum(["trigger", "condition", "action"]),
   data: z.record(z.any()),
+  // Canvas layout coordinates — purely a frontend concern (the workflow
+  // engine never reads this), but persisted here since `graph` is the only
+  // place a node's state is stored, so nodes don't jump back to a default
+  // layout every time the workflow is reopened.
+  position: z.object({ x: z.number(), y: z.number() }).optional(),
 });
 
 const edgeSchema = z.object({

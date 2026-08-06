@@ -29,6 +29,8 @@ export interface WorkflowNode {
   id: string;
   type: TriggerNodeType | ConditionNodeType | ActionNodeType;
   data: WorkflowTriggerData | WorkflowConditionData | WorkflowActionData;
+  /** Canvas layout position — a frontend/editor concern, ignored by the workflow engine. */
+  position?: { x: number; y: number };
 }
 
 export interface WorkflowEdge {
