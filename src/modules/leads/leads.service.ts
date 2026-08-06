@@ -196,3 +196,50 @@ export async function updateLead(
 
   return updated;
 }
+
+export async function scheduleMeeting(
+  workspaceId: string,
+  leadId: string,
+  input: { topic?: string; startTime: Date; endTime: Date; meetingUrl?: string }
+) {
+  const lead = await prisma.lead.findFirst({ where: { id: leadId, workspaceId } });
+  if (!lead) throw new NotFoundError("Lead not found");
+
+  const meeting = await prisma.meeting.create({
+    data: {
+      leadId,
+      source: "MANUAL",
+      status: "CONFIRMED",
+      topic: input.topic ?? null,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      meetingUrl: input.meetingUrl ?? null,
+    },
+  });
+
+  if (lead.status === "NEW" || lead.status === "ENGAGED") {
+    await prisma.lead.update({ where: { id: leadId }, data: { status: "MEETING_BOOKED" } });
+  }
+
+  return meeting;
+}
+
+export async function logCall(workspaceId: string, leadId: string, notes: string) {
+  const lead = await prisma.lead.findFirst({ where: { id: leadId, workspaceId } });
+  if (!lead) throw new NotFoundError("Lead not found");
+
+  const conversation = await prisma.conversation.findFirst({
+    where: { leadId },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!conversation) throw new NotFoundError("No conversation found for this lead");
+
+  return prisma.message.create({
+    data: {
+      conversationId: conversation.id,
+      direction: "OUTBOUND",
+      sender: "SYSTEM",
+      content: `📞 Call logged: ${notes}`,
+    },
+  });
+}

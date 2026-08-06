@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { listLeadsQuerySchema, replySchema, updateLeadSchema } from "./leads.schema";
+import { listLeadsQuerySchema, replySchema, updateLeadSchema, scheduleMeetingSchema, logCallSchema } from "./leads.schema";
 import * as leadsService from "./leads.service";
 
 export async function listLeadsHandler(req: Request, res: Response) {
@@ -23,4 +23,16 @@ export async function updateLeadHandler(req: Request, res: Response) {
   const input = updateLeadSchema.parse(req.body);
   const lead = await leadsService.updateLead(req.auth!.workspaceId, req.params.leadId, input);
   res.status(200).json(lead);
+}
+
+export async function scheduleMeetingHandler(req: Request, res: Response) {
+  const input = scheduleMeetingSchema.parse(req.body);
+  const meeting = await leadsService.scheduleMeeting(req.auth!.workspaceId, req.params.leadId, input);
+  res.status(201).json(meeting);
+}
+
+export async function logCallHandler(req: Request, res: Response) {
+  const { notes } = logCallSchema.parse(req.body);
+  const message = await leadsService.logCall(req.auth!.workspaceId, req.params.leadId, notes);
+  res.status(201).json(message);
 }

@@ -19,3 +19,14 @@ export const updateLeadSchema = z.object({
   // Sent from the UI as whole currency units (e.g. 1500.00), stored as cents.
   dealValue: z.coerce.number().min(0).max(100_000_000).nullable().optional(),
 });
+
+export const scheduleMeetingSchema = z.object({
+  topic: z.string().max(200).optional(),
+  startTime: z.coerce.date(),
+  endTime: z.coerce.date(),
+  meetingUrl: z.string().url().optional(),
+});
+
+export const logCallSchema = z.object({
+  notes: z.string().min(1).max(2000),
+});

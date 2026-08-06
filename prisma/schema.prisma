@@ -403,6 +403,7 @@ model WorkflowRun {
 enum MeetingSource {
   CALENDLY
   GOOGLE_CALENDAR
+  MANUAL
 }
 
 enum MeetingStatus {
