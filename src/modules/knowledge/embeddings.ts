@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { env } from "@/config/env";
 import { resolveAiKey } from "@/modules/ai-providers/ai-providers.service";
+import { logger } from "@/lib/logger";
 
 const EMBEDDING_DIMENSIONS = 1536;
 
@@ -31,18 +32,29 @@ export async function embedText(workspaceId: string, text: string): Promise<numb
     return localFallbackEmbedding(text);
   }
 
-  const res = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: env.OPENAI_EMBEDDING_MODEL, input: text }),
-  });
+  try {
+    const res = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: env.OPENAI_EMBEDDING_MODEL, input: text }),
+    });
 
-  if (!res.ok) {
-    throw new Error(`OpenAI embeddings request failed (${res.status}): ${await res.text()}`);
+    if (!res.ok) {
+      throw new Error(`OpenAI embeddings request failed (${res.status}): ${await res.text()}`);
+    }
+
+    const data = (await res.json()) as { data: Array<{ embedding: number[] }> };
+    return data.data[0].embedding;
+  } catch (err) {
+    // The workspace's configured key is real (resolveAiKey returned one) but
+    // isn't necessarily an OpenAI key — Groq and most free OpenAI-compatible
+    // providers don't serve embedding models at all, so this 401s/404s even
+    // though chat completions work fine with the same key. Fall back to the
+    // deterministic local embedding rather than failing the caller outright;
+    // search quality degrades, but the feature keeps working.
+    logger.warn({ err, workspaceId }, "OpenAI embeddings request failed — using local fallback embedding");
+    return localFallbackEmbedding(text);
   }
-
-  const data = (await res.json()) as { data: Array<{ embedding: number[] }> };
-  return data.data[0].embedding;
 }
 
 export async function embedBatch(workspaceId: string, texts: string[]): Promise<number[][]> {
@@ -51,16 +63,21 @@ export async function embedBatch(workspaceId: string, texts: string[]): Promise<
     return texts.map(localFallbackEmbedding);
   }
 
-  const res = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: env.OPENAI_EMBEDDING_MODEL, input: texts }),
-  });
+  try {
+    const res = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: env.OPENAI_EMBEDDING_MODEL, input: texts }),
+    });
 
-  if (!res.ok) {
-    throw new Error(`OpenAI embeddings request failed (${res.status}): ${await res.text()}`);
+    if (!res.ok) {
+      throw new Error(`OpenAI embeddings request failed (${res.status}): ${await res.text()}`);
+    }
+
+    const data = (await res.json()) as { data: Array<{ embedding: number[]; index: number }> };
+    return data.data.sort((a, b) => a.index - b.index).map((d) => d.embedding);
+  } catch (err) {
+    logger.warn({ err, workspaceId }, "OpenAI embeddings request failed — using local fallback embeddings");
+    return texts.map(localFallbackEmbedding);
   }
-
-  const data = (await res.json()) as { data: Array<{ embedding: number[]; index: number }> };
-  return data.data.sort((a, b) => a.index - b.index).map((d) => d.embedding);
 }
