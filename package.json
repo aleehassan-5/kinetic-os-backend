@@ -38,8 +38,8 @@
     "pdf-parse": "^1.1.1",
     "pino": "^9.5.0",
     "pino-http": "^10.3.0",
-    "zod": "^3.23.8",
-    "prisma": "^5.20.0"
+    "prisma": "^5.20.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
