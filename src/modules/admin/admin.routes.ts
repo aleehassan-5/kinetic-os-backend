@@ -8,6 +8,7 @@ import {
   rejectAccountHandler,
   suspendAccountHandler,
   reactivateAccountHandler,
+  deleteAccountHandler,
 } from "./admin.controller";
 
 const router = Router();
@@ -22,5 +23,6 @@ router.post("/accounts/:id/approve", asyncHandler(approveAccountHandler));
 router.post("/accounts/:id/reject", asyncHandler(rejectAccountHandler));
 router.post("/accounts/:id/suspend", asyncHandler(suspendAccountHandler));
 router.post("/accounts/:id/reactivate", asyncHandler(reactivateAccountHandler));
+router.delete("/accounts/:id", asyncHandler(deleteAccountHandler));
 
 export default router;

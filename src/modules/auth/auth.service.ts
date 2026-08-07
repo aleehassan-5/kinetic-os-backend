@@ -8,6 +8,7 @@ import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 import type { ChangePasswordInput, ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput } from "./auth.schema";
 import type { GoogleProfile } from "@/lib/google-oauth";
+import type { Prisma } from "@prisma/client";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -27,8 +28,46 @@ async function issueTokenPair(userId: string, workspaceId: string, role: string,
 }
 
 export async function register(input: RegisterInput) {
-  const existing = await prisma.user.findUnique({ where: { email: input.email } });
-  if (existing) throw new ConflictError("An account with this email already exists");
+  const existing = await prisma.user.findUnique({ where: { email: input.email }, include: { account: true } });
+
+  if (existing) {
+    // Super admins and anyone without an Account at all (shouldn't normally
+    // happen) fall back to the old hard block — nothing to "re-appeal".
+    // Same for PENDING/ACTIVE/SUSPENDED: those are live applications or
+    // accounts, not something a fresh signup should be able to touch.
+    if (existing.isSuperAdmin || !existing.account || existing.account.status !== "REJECTED") {
+      throw new ConflictError("An account with this email already exists");
+    }
+
+    // A REJECTED application re-submitting is a re-appeal, not a duplicate
+    // signup — reuse the same User/Account rows, refresh their details, and
+    // send it back into the PENDING queue instead of blocking them forever.
+    const passwordHash = await hashPassword(input.password);
+    const account = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      await tx.user.update({
+        where: { id: existing.id },
+        data: { name: input.name, passwordHash },
+      });
+      return tx.account.update({
+        where: { id: existing.account!.id },
+        data: {
+          businessName: input.businessName,
+          niche: input.niche,
+          phone: input.phone,
+          status: "PENDING",
+          rejectionReason: null,
+          approvedById: null,
+          approvedAt: null,
+        },
+      });
+    });
+
+    return {
+      status: "pending" as const,
+      message: "Thanks! Your account is under review — we'll email you once it's approved.",
+      accountId: account.id,
+    };
+  }
 
   const passwordHash = await hashPassword(input.password);
 
@@ -85,11 +124,15 @@ export async function login(input: LoginInput) {
     throw new ForbiddenError("Your account is still awaiting approval. We'll email you once it's reviewed.");
   }
   if (user.account.status === "REJECTED") {
-    throw new ForbiddenError(
-      user.account.rejectionReason
-        ? `Your account application wasn't approved: ${user.account.rejectionReason}`
-        : "Your account application wasn't approved."
-    );
+    // Same fix as the register() and loginWithGoogle() paths — a rejected
+    // application shouldn't be a permanent dead end. There's no new form
+    // data to update here, so just send the existing details back into the
+    // PENDING review queue.
+    await prisma.account.update({
+      where: { id: user.account.id },
+      data: { status: "PENDING", rejectionReason: null, approvedById: null, approvedAt: null },
+    });
+    return { pending: true as const };
   }
   if (user.account.status === "SUSPENDED") {
     throw new ForbiddenError("Your account has been suspended. Contact support for help.");
@@ -192,7 +235,14 @@ export async function loginWithGoogle(profile: GoogleProfile) {
     return { pending: true as const };
   }
   if (user.account.status === "REJECTED") {
-    throw new ForbiddenError("Your account application wasn't approved.");
+    // Same fix as the email/password path: a rejected application shouldn't
+    // be a permanent dead end. There's no new form data to update here, so
+    // just send the existing details back into the PENDING review queue.
+    await prisma.account.update({
+      where: { id: user.account.id },
+      data: { status: "PENDING", rejectionReason: null, approvedById: null, approvedAt: null },
+    });
+    return { pending: true as const };
   }
   if (user.account.status === "SUSPENDED") {
     throw new ForbiddenError("Your account has been suspended. Contact support for help.");

@@ -33,3 +33,8 @@ export async function reactivateAccountHandler(req: Request, res: Response) {
   const result = await adminService.reactivateAccount(req.params.id);
   res.status(200).json(result);
 }
+
+export async function deleteAccountHandler(req: Request, res: Response) {
+  const result = await adminService.deleteAccount(req.params.id);
+  res.status(200).json(result);
+}

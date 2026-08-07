@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const { prismaMock } = vi.hoisted(() => {
   const mock: any = {
     user: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), create: vi.fn(), update: vi.fn() },
-    workspace: { create: vi.fn(), findUnique: vi.fn(), count: vi.fn() },
+    account: { create: vi.fn(), update: vi.fn() },
     membership: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), findUniqueOrThrow: vi.fn(), findMany: vi.fn() },
     integration: { createMany: vi.fn(), findMany: vi.fn() },
     refreshToken: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
@@ -23,79 +23,86 @@ beforeEach(() => {
 });
 
 describe("auth.service — register", () => {
-  it("creates a workspace + user + membership and returns tokens, never the password hash", async () => {
-    prismaMock.workspace.count.mockResolvedValue(0); // first signup on this instance
-    prismaMock.user.findUnique.mockResolvedValue(null); // no existing account
-    prismaMock.workspace.create.mockResolvedValue({ id: "ws1", name: "Acme", slug: "acme-abcde" });
-    prismaMock.user.create.mockResolvedValue({
-      id: "u1",
+  it("creates a PENDING account + user and returns a pending status, never tokens or the password hash", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(null); // no existing account for this email
+    prismaMock.account.create.mockResolvedValue({ id: "acc1", businessName: "Acme", status: "PENDING" });
+
+    const result = await register({
       name: "Ali",
       email: "ali@example.com",
-      passwordHash: "hashed",
+      password: "supersecret1",
+      businessName: "Acme",
     });
-    prismaMock.membership.create.mockResolvedValue({ id: "m1", userId: "u1", workspaceId: "ws1", role: "OWNER" });
-    prismaMock.integration.createMany.mockResolvedValue({ count: 9 });
-    prismaMock.refreshToken.create.mockResolvedValue({});
 
-    const result = await register({ name: "Ali", email: "ali@example.com", password: "supersecret1", workspaceName: "Acme" });
-
-    expect(result.accessToken).toBeTypeOf("string");
-    expect(result.refreshToken).toBeTypeOf("string");
-    expect(result.user).not.toHaveProperty("passwordHash"); // sanitizeUser must strip this
-    expect(result.user.email).toBe("ali@example.com");
-    // 9 integration rows seeded (WhatsApp/Telegram/.../Google Sheets), all NOT_CONNECTED
-    expect(prismaMock.integration.createMany).toHaveBeenCalledWith(
+    expect(result.status).toBe("pending");
+    expect(result.accountId).toBe("acc1");
+    expect(result).not.toHaveProperty("accessToken"); // no workspace/tokens exist until a super_admin approves
+    expect(prismaMock.account.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.arrayContaining([expect.objectContaining({ status: "NOT_CONNECTED" })]),
+        data: expect.objectContaining({
+          businessName: "Acme",
+          ownerEmail: "ali@example.com",
+          status: "PENDING",
+          users: { create: expect.objectContaining({ name: "Ali", email: "ali@example.com" }) },
+        }),
       })
     );
   });
 
-  it("rejects signup with an email that's already registered", async () => {
-    prismaMock.workspace.count.mockResolvedValue(0);
-    prismaMock.user.findUnique.mockResolvedValue({ id: "existing", email: "ali@example.com" });
+  it("rejects signup with an email that's already registered and active/pending/suspended", async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "existing",
+      email: "ali@example.com",
+      isSuperAdmin: false,
+      account: { id: "acc1", status: "PENDING" },
+    });
 
     await expect(
-      register({ name: "Ali", email: "ali@example.com", password: "supersecret1", workspaceName: "Acme" })
+      register({ name: "Ali", email: "ali@example.com", password: "supersecret1", businessName: "Acme" })
     ).rejects.toBeInstanceOf(ConflictError);
 
-    expect(prismaMock.workspace.create).not.toHaveBeenCalled(); // must not create anything on conflict
+    expect(prismaMock.account.create).not.toHaveBeenCalled();
   });
 
-  it("blocks signup once a business already exists on this instance — single-tenant, not open multi-tenant", async () => {
-    prismaMock.workspace.count.mockResolvedValue(1); // someone already signed up
+  it("treats a re-signup from a REJECTED account as a re-appeal instead of a conflict", async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "existing",
+      email: "ali@example.com",
+      isSuperAdmin: false,
+      account: { id: "acc1", status: "REJECTED" },
+    });
+    prismaMock.user.update.mockResolvedValue({});
+    prismaMock.account.update.mockResolvedValue({ id: "acc1", status: "PENDING" });
 
-    await expect(
-      register({ name: "Someone Else", email: "outsider@example.com", password: "supersecret1", workspaceName: "Other Co" })
-    ).rejects.toBeInstanceOf(ForbiddenError);
+    const result = await register({
+      name: "Ali Updated",
+      email: "ali@example.com",
+      password: "newpassword1",
+      businessName: "Acme v2",
+    });
 
-    // Must not even check for an email conflict or touch the DB further — the door is just closed.
-    expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
-    expect(prismaMock.workspace.create).not.toHaveBeenCalled();
-  });
-
-  it("allows exactly the first signup through when the instance is brand new", async () => {
-    prismaMock.workspace.count.mockResolvedValue(0);
-    prismaMock.user.findUnique.mockResolvedValue(null);
-    prismaMock.workspace.create.mockResolvedValue({ id: "ws1", name: "Acme", slug: "acme-abcde" });
-    prismaMock.user.create.mockResolvedValue({ id: "u1", name: "Ali", email: "ali@example.com", passwordHash: "hashed" });
-    prismaMock.membership.create.mockResolvedValue({ id: "m1", userId: "u1", workspaceId: "ws1", role: "OWNER" });
-    prismaMock.integration.createMany.mockResolvedValue({ count: 9 });
-    prismaMock.refreshToken.create.mockResolvedValue({});
-
-    const result = await register({ name: "Ali", email: "ali@example.com", password: "supersecret1", workspaceName: "Acme" });
-
-    expect(result.accessToken).toBeTypeOf("string");
+    expect(result.status).toBe("pending");
+    expect(result.accountId).toBe("acc1");
+    // Must reuse the same account row and clear the rejection instead of creating a new one.
+    expect(prismaMock.account.create).not.toHaveBeenCalled();
+    expect(prismaMock.account.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "acc1" },
+        data: expect.objectContaining({ status: "PENDING", rejectionReason: null, approvedById: null, approvedAt: null }),
+      })
+    );
   });
 });
 
 describe("auth.service — login", () => {
-  it("issues tokens for a correct email + password", async () => {
+  it("issues tokens for a correct email + password on an ACTIVE account", async () => {
     const passwordHash = await hashPassword("correct-horse-battery-staple");
     prismaMock.user.findUnique.mockResolvedValue({
       id: "u1",
       email: "ali@example.com",
       passwordHash,
+      isSuperAdmin: false,
+      account: { status: "ACTIVE" },
       memberships: [{ id: "m1", workspaceId: "ws1", role: "OWNER" }],
     });
     prismaMock.membership.update.mockResolvedValue({});
@@ -112,6 +119,8 @@ describe("auth.service — login", () => {
       id: "u1",
       email: "ali@example.com",
       passwordHash,
+      isSuperAdmin: false,
+      account: { status: "ACTIVE" },
       memberships: [{ id: "m1", workspaceId: "ws1", role: "OWNER" }],
     });
 
@@ -128,10 +137,49 @@ describe("auth.service — login", () => {
       id: "u1",
       email: "ali@example.com",
       passwordHash: null, // signed up via Google, never set a password
+      isSuperAdmin: false,
+      account: { status: "ACTIVE" },
       memberships: [{ id: "m1", workspaceId: "ws1", role: "OWNER" }],
     });
 
     await expect(login({ email: "ali@example.com", password: "anything" })).rejects.toThrow(/Google sign-in/);
+  });
+
+  it("blocks login for an account still awaiting approval", async () => {
+    const passwordHash = await hashPassword("supersecret1");
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "u1",
+      email: "ali@example.com",
+      passwordHash,
+      isSuperAdmin: false,
+      account: { status: "PENDING" },
+      memberships: [],
+    });
+
+    await expect(login({ email: "ali@example.com", password: "supersecret1" })).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("re-appeals a REJECTED account on login instead of permanently blocking it", async () => {
+    const passwordHash = await hashPassword("supersecret1");
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "u1",
+      email: "ali@example.com",
+      passwordHash,
+      isSuperAdmin: false,
+      account: { id: "acc1", status: "REJECTED", rejectionReason: "Not a real business" },
+      memberships: [],
+    });
+    prismaMock.account.update.mockResolvedValue({});
+
+    const result = await login({ email: "ali@example.com", password: "supersecret1" });
+
+    expect(result).toEqual({ pending: true });
+    expect(prismaMock.account.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "acc1" },
+        data: expect.objectContaining({ status: "PENDING", rejectionReason: null, approvedById: null, approvedAt: null }),
+      })
+    );
   });
 });
 
@@ -161,6 +209,11 @@ describe("auth.service — refresh", () => {
       revokedAt: null,
       expiresAt: new Date(Date.now() + 100000),
     });
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "u1",
+      isSuperAdmin: false,
+      account: { status: "ACTIVE" },
+    });
     prismaMock.membership.findFirst.mockResolvedValue({ workspaceId: "ws1", role: "OWNER" });
     prismaMock.refreshToken.update.mockResolvedValue({});
     prismaMock.refreshToken.create.mockResolvedValue({});
@@ -172,6 +225,24 @@ describe("auth.service — refresh", () => {
     );
     expect(result.accessToken).toBeTypeOf("string");
     expect(prismaMock.refreshToken.create).toHaveBeenCalled(); // a new token record was actually issued
+  });
+
+  it("rejects refresh for an account that's no longer ACTIVE", async () => {
+    const token = signRefreshToken("u1");
+    prismaMock.refreshToken.findUnique.mockResolvedValue({
+      id: "rt1",
+      tokenHash: hashToken(token),
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 100000),
+    });
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "u1",
+      isSuperAdmin: false,
+      account: { status: "SUSPENDED" },
+    });
+    prismaMock.refreshToken.update.mockResolvedValue({});
+
+    await expect(refresh(token)).rejects.toBeInstanceOf(ForbiddenError);
   });
 });
 
