@@ -156,3 +156,23 @@ export async function reactivateAccount(accountId: string) {
   await prisma.account.update({ where: { id: account.id }, data: { status: "ACTIVE" } });
   return { accountId: account.id, status: "ACTIVE" as const };
 }
+
+/**
+ * Permanently removes a REJECTED account and its user record (cascades via
+ * the User→Account relation), freeing up the email so the person can start
+ * a completely fresh application instead of re-appealing with their old
+ * details. Restricted to REJECTED on purpose — ACTIVE/PENDING/SUSPENDED
+ * accounts can have a live workspace and real data behind them, and those
+ * should go through suspend or stay in the review queue, never a hard delete
+ * from this endpoint.
+ */
+export async function deleteAccount(accountId: string) {
+  const account = await prisma.account.findUnique({ where: { id: accountId } });
+  if (!account) throw new NotFoundError("Account not found");
+  if (account.status !== "REJECTED") {
+    throw new AppError(`This account is ${account.status.toLowerCase()}, not rejected — only rejected accounts can be deleted.`, 409);
+  }
+
+  await prisma.account.delete({ where: { id: account.id } });
+  return { accountId, deleted: true as const };
+}
